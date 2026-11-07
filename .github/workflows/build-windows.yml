@@ -47,7 +47,7 @@ jobs:
           name: mygo-music-windows-amd64
           path: build/
 
-      - name: Create GitHub Release
+      - name: Create or Update GitHub Release
         if: (github.event_name == 'workflow_dispatch' && inputs.create_release == true) || startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
@@ -55,12 +55,35 @@ jobs:
           if [ -n "$GITHUB_REF_NAME" ] && [[ "$GITHUB_REF_NAME" == v* ]]; then
             TAG="$GITHUB_REF_NAME"
           else
-            TAG="v0.1.21-custom-$(date +'%Y%m%d%H%M')"
+            TAG="v0.1.22"
           fi
-          gh release create "$TAG" build/* \
-            --title "MyGo Music Windows ($TAG)" \
-            --notes "Custom build with:
-          - 歌单中歌名搜索 (Search/filter songs within playlists and liked songs)
-          - 歌词字体大小调节 (Adjustable lyrics font size in Settings -> Playback)
-          
-          Built automatically from commit ${{ github.sha }}."
+
+          mkdir -p release_assets
+          find build -type f -name "*.exe" -exec cp {} release_assets/ \;
+          find build -type f -name "SHA256SUMS" -exec cp {} release_assets/ \;
+
+          echo "Release assets prepared:"
+          ls -la release_assets/
+
+          NOTES="### 自定义功能特性 (Custom Features)
+          - **歌单中歌名搜索 (Search in Playlist)**:
+            - 歌单详情页（Playlist）与我喜欢的音乐（Liked Songs）右上方新增搜索框。
+            - 实时根据歌曲名、歌手名过滤歌曲列表，支持直接播放过滤结果。
+          - **歌词字体大小调节 (Adjustable Lyrics Font Size)**:
+            - 设置 (Settings) -> 播放 (Playback) 中新增【歌词字体大小】选项。
+            - 提供「小 (24px)」、「标准 (30px)」、「大 (36px)」、「特大 (42px)」四档，支持配置持久化。
+            - 逐字歌词、单行滚动歌词及翻译文本同步缩放。
+
+          ### 包含文件 (Files)
+          - \`mygo-music-setup-0.1.22-amd64.exe\`: Windows 官方风格安装程序 (NSIS Installer)
+          - \`MyGo.Music.exe\`: Windows 64位独立便携版 (绿色免安装)"
+
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            echo "Updating existing release $TAG..."
+            gh release upload "$TAG" release_assets/* --clobber
+          else
+            echo "Creating new release $TAG..."
+            gh release create "$TAG" release_assets/* \
+              --title "MyGo Music $TAG (Windows)" \
+              --notes "$NOTES"
+          fi

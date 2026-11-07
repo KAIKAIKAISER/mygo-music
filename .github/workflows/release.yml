@@ -17,6 +17,7 @@ permissions:
 
 jobs:
   draft-release:
+    if: github.repository == 'egoist/mygo-music'
     runs-on: ubuntu-latest
     outputs:
       tag: ${{ steps.tag.outputs.tag }}
@@ -63,6 +64,7 @@ jobs:
           fi
 
   build:
+    if: github.repository == 'egoist/mygo-music'
     needs: draft-release
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
