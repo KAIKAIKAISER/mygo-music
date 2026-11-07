@@ -45,6 +45,12 @@ type packetStream struct {
 	prime  int64 // the encoder's priming, in frames, to drop
 	frames int64 // the length, or -1 if unknown
 	exact  bool  // whether it is: then what's past it is padding, dropped
+	// last is where the last packet found ends, in frames, as its container
+	// says, when that isn't ends': AAC's packets each decode to aacFrame
+	// frames, and ends has them so, whatever the container says they last,
+	// for a seek to land where decoding straight through does. Zero when
+	// ends is the container's.
+	last   int64
 	next   int   // the packet decoded next
 	pos    int64 // the frame Read returns next
 	skip   int64 // frames to drop before it
@@ -89,9 +95,29 @@ func (s *packetStream) findMore() bool {
 	}
 	s.more = nil
 	if len(s.ends) > 0 {
-		s.frames, s.exact = s.ends[len(s.ends)-1]-s.prime, true
+		s.frames, s.exact = s.length()-s.prime, true
 	}
 	return false
+}
+
+// length is where the packets found end, in frames.
+func (s *packetStream) length() int64 {
+	if s.last > 0 {
+		return s.last
+	}
+	return s.ends[len(s.ends)-1]
+}
+
+// add adds a packet of the size given at off, ending at end frames as its
+// container says.
+func (s *packetStream) add(off int64, size int, end int64, aac bool) {
+	s.offs = append(s.offs, off)
+	s.sizes = append(s.sizes, size)
+	if aac {
+		s.last = end
+		end = int64(len(s.ends)+1) * aacFrame
+	}
+	s.ends = append(s.ends, end)
 }
 
 func (s *packetStream) Read(dst []float32) (int, error) {
@@ -218,14 +244,13 @@ func openMP4Stream(dl *download, durationMs int64) (*packetStream, error) {
 		}
 		return s, nil
 	}
-	s.offs = a.Offsets
-	s.sizes = make([]int, len(a.Sizes))
-	s.ends = make([]int64, len(a.Ends))
+	s.offs = make([]int64, 0, len(a.Offsets))
+	s.sizes = make([]int, 0, len(a.Sizes))
+	s.ends = make([]int64, 0, len(a.Ends))
 	for i := range a.Sizes {
-		s.sizes[i] = int(a.Sizes[i])
-		s.ends[i] = frames(a.Ends[i])
+		s.add(a.Offsets[i], int(a.Sizes[i]), frames(a.Ends[i]), a.Codec == "mp4a")
 	}
-	s.frames, s.exact = s.ends[len(s.ends)-1]-s.prime, true
+	s.frames, s.exact = s.length()-s.prime, true
 	return s, nil
 }
 
@@ -268,9 +293,7 @@ func (s *packetStream) fragments(a *mp4.Track, size int64, frames func(int64) in
 				return false
 			}
 			for i := found; i < len(a.Sizes); i++ {
-				s.offs = append(s.offs, a.Offsets[i])
-				s.sizes = append(s.sizes, int(a.Sizes[i]))
-				s.ends = append(s.ends, frames(a.Ends[i]))
+				s.add(a.Offsets[i], int(a.Sizes[i]), frames(a.Ends[i]), a.Codec == "mp4a")
 			}
 			if len(a.Sizes) > found {
 				return true
