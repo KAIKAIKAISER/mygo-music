@@ -340,7 +340,12 @@ func (a *app) nowPlayingBody(c *ui.Context, tr *music.Track, art *artwork, accen
 		side := float32(math.Min(float64(w)*0.36, 440))
 		// The cover leaves room above it for the tabs, starting as far
 		// under them as the wall's song does.
-		coverSize := min(side, h-436)
+		coverRoom := h - 436
+		coverSize := min(side, coverRoom)
+		// In a window taller than the cover grows, the column is shorter
+		// than the window by what the cover falls short of its room, and,
+		// centred, sits half of that lower.
+		coverSunk := (coverRoom - coverSize) / 2
 		// The column is as wide as the cover, for the cover, what plays
 		// and the tabs over it to start at one edge, but wide enough for
 		// the controls.
@@ -395,9 +400,13 @@ func (a *app) nowPlayingBody(c *ui.Context, tr *music.Track, art *artwork, accen
 				// The pane starts level with the cover beside it, but below the
 				// tabs, which start level with the pane's top: they come and go
 				// with the pointer, so they sit out of the flow, never over it.
+				// In a tall window it starts where the cover would, as tall
+				// as its room: level with the cover sunk in the middle, it
+				// left the top of the window empty, cutting off the lines
+				// before the one sung.
 				b := pane.LayoutBounds()
 				if b.H > 0 && coverTop > 0 {
-					if top := max(coverTop-b.Y, npTabsHeight+8); top != a.npPaneTop {
+					if top := max(coverTop-coverSunk-b.Y, npTabsHeight+8); top != a.npPaneTop {
 						a.npPaneTop = top
 						c.AnimationFrame()
 					}
