@@ -238,6 +238,12 @@ func (a *app) episodeRow(c *ui.Context, d *showData, i int, cur *music.Track) {
 		ui.Text(c, clock(time.Duration(tr.Duration)*time.Millisecond)).FontSize(12).FontFeatures("tnum").TextColor(p.muted)
 	})
 	if row.Clicked() {
+		if sameTrack(a.pl.Current(), tr) {
+			if !a.pl.Playing() && !a.pl.Loading() {
+				a.pl.TogglePlay()
+			}
+			return
+		}
 		a.pl.PlayTrack(d.episodes, i)
 	}
 }

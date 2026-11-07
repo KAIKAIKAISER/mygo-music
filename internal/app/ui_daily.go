@@ -396,6 +396,12 @@ func (a *app) dailyPicks(c *ui.Context, songs []music.Track, ours bool) {
 				})
 			})
 			if row.Clicked() {
+				if sameTrack(a.pl.Current(), tr) {
+					if !a.pl.Playing() && !a.pl.Loading() {
+						a.pl.TogglePlay()
+					}
+					return
+				}
 				a.pl.PlayTrack(songs, i)
 			}
 		}

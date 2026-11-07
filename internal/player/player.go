@@ -185,10 +185,21 @@ func (p *Player) PlayQueue(tracks []music.Track, start int) {
 	p.playQueue(tracks, start, forward)
 }
 
+// sameTrack reports whether two tracks are the same track.
+func sameTrack(x, y *music.Track) bool {
+	return x != nil && y != nil && x.ID == y.ID && x.Source == y.Source
+}
+
 // PlayTrack replaces the queue with tracks and plays the one at i, the
 // listener's pick: one that can't play stays, saying why, rather than another
 // playing in its place.
 func (p *Player) PlayTrack(tracks []music.Track, i int) {
+	if i >= 0 && i < len(tracks) && p.track != nil && sameTrack(p.track, &tracks[i]) {
+		if !p.playing && !p.loading {
+			p.TogglePlay()
+		}
+		return
+	}
 	p.playQueue(tracks, i, stay)
 }
 

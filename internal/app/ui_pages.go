@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"math/rand/v2"
 	"strings"
 	"time"
 
@@ -316,21 +317,35 @@ func (a *app) playlistHeader(c *ui.Context, pl *music.Playlist, tracks []music.T
 	})
 }
 
+func randomPlayable(tracks []music.Track) int {
+	var playable []int
+	for i, tr := range tracks {
+		if !tr.Unavailable {
+			playable = append(playable, i)
+		}
+	}
+	if len(playable) == 0 {
+		return 0
+	}
+	return playable[rand.IntN(len(playable))]
+}
+
 // playButtons are the buttons of a page that play what it lists, in order or
 // shuffled.
 func (a *app) playButtons(c *ui.Context, tracks []music.Track) {
 	p := a.pal
 	if pillButton(c.Key("play"), iconPlay, T("Play"), p.accent, p.onAccent).Clicked() {
+		start := firstPlayable(tracks)
 		if a.pl.Shuffle() {
-			a.pl.ToggleShuffle()
+			start = randomPlayable(tracks)
 		}
-		a.pl.PlayQueue(tracks, firstPlayable(tracks))
+		a.pl.PlayQueue(tracks, start)
 	}
 	if pillButton(c.Key("shuffle"), iconShuffle, T("Shuffle"), p.hover.Over(p.bg), p.text).Clicked() {
 		if !a.pl.Shuffle() {
 			a.pl.ToggleShuffle()
 		}
-		a.pl.PlayQueue(tracks, firstPlayable(tracks))
+		a.pl.PlayQueue(tracks, randomPlayable(tracks))
 	}
 }
 
@@ -592,6 +607,12 @@ func (a *app) trackRow(c *ui.Context, tracks []music.Track, i int, covers bool, 
 		ui.Text(c, clock(tr.Length())).FontSize(12.5).FontFeatures("tnum").TextColor(p.faint).Width(44).TextAlign(ui.End)
 	})
 	if row.Clicked() && !tr.Unavailable {
+		if sameTrack(a.pl.Current(), tr) {
+			if !a.pl.Playing() && !a.pl.Loading() {
+				a.pl.TogglePlay()
+			}
+			return
+		}
 		a.pl.PlayTrack(tracks, i)
 	}
 }
