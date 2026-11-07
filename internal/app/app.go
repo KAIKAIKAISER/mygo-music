@@ -110,6 +110,9 @@ type app struct {
 	query     string
 	searchBox ui.Handle
 
+	playlistFilter    string
+	playlistFilterBox ui.Handle
+
 	settingsPage      string // the settings' page that shows
 	settingsQuery     string // what's searched for in the settings
 	settingsSearchBox ui.Handle

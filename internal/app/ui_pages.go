@@ -270,10 +270,11 @@ func (a *app) playlistPage(c *ui.Context) {
 		a.trackSkeleton(c, s, true, func(c *ui.Context) { a.playlistHeaderSkeleton(c, s) })
 		return
 	}
-	a.trackRows(c, pl.Tracks, true, func(c *ui.Context) { a.playlistHeader(c, pl) })
+	tracks := a.filterTracks(pl.Tracks)
+	a.trackRows(c, tracks, true, func(c *ui.Context) { a.playlistHeader(c, pl, tracks) })
 }
 
-func (a *app) playlistHeader(c *ui.Context, pl *music.Playlist) {
+func (a *app) playlistHeader(c *ui.Context, pl *music.Playlist, tracks []music.Track) {
 	p := a.pal
 	ui.Row(c).Gap(28).AlignItems(ui.End).Padding(0, 0, 26, 0).Children(func() {
 		ui.Box(c).Size(212, 212).Radius(14).Shadow(0, 18, 40, -10, p.cardShade).Children(func() {
@@ -291,8 +292,8 @@ func (a *app) playlistHeader(c *ui.Context, pl *music.Playlist) {
 			if d := strings.TrimSpace(pl.Description); d != "" {
 				ui.Text(c, strings.ReplaceAll(d, "\n", " ")).FontSize(12.5).TextColor(p.muted).MaxLines(2).LineHeight(1.45).Margin(2, 0, 0, 0)
 			}
-			ui.Row(c).Gap(10).Margin(10, 0, 0, 0).Children(func() {
-				a.playButtons(c, pl.Tracks)
+			ui.Row(c).Gap(10).Margin(10, 0, 0, 0).AlignItems(ui.Center).Children(func() {
+				a.playButtons(c, tracks)
 				if a.savable(pl) {
 					icon, label := iconPlus, TC("Save", "library")
 					if a.isSaved(pl) {
@@ -305,6 +306,10 @@ func (a *app) playlistHeader(c *ui.Context, pl *music.Playlist) {
 				if mine := a.editable(pl.ID); mine != nil && (a.can("renamePlaylist") || a.can("deletePlaylist")) {
 					more := iconButton(c.Key("more"), iconMore, 18, p.muted, T("More"))
 					more.Menu(func(m *ui.Menu) { a.playlistMenu(m, mine) })
+				}
+				if len(pl.Tracks) > 0 || a.playlistFilter != "" {
+					ui.Box(c).Grow(1)
+					a.playlistSearchField(c, p)
 				}
 			})
 		})
@@ -332,6 +337,7 @@ func (a *app) playButtons(c *ui.Context, tracks []music.Track) {
 // likedPage lists the songs the listener likes, loaded a page at a time.
 func (a *app) likedPage(c *ui.Context) {
 	lib := a.library
+	tracks := a.filterTracks(lib.likedList)
 	header := func(c *ui.Context) {
 		p := a.pal
 		ui.Row(c).Gap(28).AlignItems(ui.End).Padding(0, 0, 26, 0).Children(func() {
@@ -345,7 +351,11 @@ func (a *app) likedPage(c *ui.Context) {
 					ui.Text(c, i18n.Songs(len(lib.likedList))).FontSize(13).TextColor(p.muted)
 				}
 				if len(lib.likedList) > 0 {
-					ui.Row(c).Gap(10).Margin(10, 0, 0, 0).Children(func() { a.playButtons(c, lib.likedList) })
+					ui.Row(c).Gap(10).Margin(10, 0, 0, 0).AlignItems(ui.Center).Children(func() {
+						a.playButtons(c, tracks)
+						ui.Box(c).Grow(1)
+						a.playlistSearchField(c, p)
+					})
 				}
 			})
 		})
@@ -358,7 +368,7 @@ func (a *app) likedPage(c *ui.Context) {
 		a.trackSkeleton(c, a.pageShimmer(c), true, header)
 		return
 	}
-	a.trackRows(c, lib.likedList, true, header, func(c *ui.Context) {
+	a.trackRows(c, tracks, true, header, func(c *ui.Context) {
 		a.pageFoot(c, &lib.likedPaged, func() { a.loadLikedPage(lib) })
 		if len(lib.likedList) == 0 {
 			a.empty(c, T("Songs you like will show here"))
@@ -436,6 +446,41 @@ func (a *app) freshenLiked(lib *library) {
 
 // trackRows lists tracks under a header, which scrolls with them; a click
 // plays the list from the track clicked.
+func (a *app) filterTracks(tracks []music.Track) []music.Track {
+	q := strings.TrimSpace(strings.ToLower(a.playlistFilter))
+	if q == "" {
+		return tracks
+	}
+	var res []music.Track
+	for _, tr := range tracks {
+		if strings.Contains(strings.ToLower(tr.Name), q) {
+			res = append(res, tr)
+			continue
+		}
+		for _, art := range tr.Artists {
+			if strings.Contains(strings.ToLower(art.Name), q) {
+				res = append(res, tr)
+				break
+			}
+		}
+	}
+	return res
+}
+
+func (a *app) playlistSearchField(c *ui.Context, p palette) {
+	field := ui.Row(c).Height(30).Width(200).Radius(8).AlignItems(ui.Center)
+	if c.Focused(a.playlistFilterBox) {
+		field.Background(p.bg).Shadow(0, 0, 0, 3, p.accent.Alpha(0.25)).Border(1, p.accent)
+	} else {
+		field.Background(p.hover).Border(1, p.hairline)
+	}
+	field.Children(func() {
+		ui.TextInputBase(c.Key("pl-filter"), &a.playlistFilter).Bind(&a.playlistFilterBox).Grow(1).MinWidth(0).PaddingStart(29).PaddingEnd(9).
+			Placeholder(T("Search in playlist")).FontSize(12.5).Label(T("Search in playlist"))
+		ui.Icon(c, iconSearch).Size(13, 13).TextColor(p.muted).Absolute().Left(9).Top(8.5).IgnoreInput(true)
+	})
+}
+
 func (a *app) trackRows(c *ui.Context, tracks []music.Track, covers bool, header func(c *ui.Context), footer ...func(c *ui.Context)) {
 	// A song's menu can take it out of the playlist it is listed in.
 	var pid string
@@ -446,7 +491,12 @@ func (a *app) trackRows(c *ui.Context, tracks []music.Track, covers bool, header
 	// Rows out of view are not built, their marks with them: a list
 	// scrolled away from its start or end has content under the bars.
 	a.underTop, a.underBottom = true, true
-	rows := len(tracks) + 1 + len(footer)
+	filteredEmpty := len(tracks) == 0 && a.playlistFilter != ""
+	extraRows := 0
+	if filteredEmpty {
+		extraRows = 1
+	}
+	rows := len(tracks) + 1 + len(footer) + extraRows
 	ui.List(c.Key(a.route), &a.trackList, rows, func(i int) {
 		if i == 0 {
 			ui.Column(c).Children(func() {
@@ -455,14 +505,20 @@ func (a *app) trackRows(c *ui.Context, tracks []music.Track, covers bool, header
 			})
 			return
 		}
+		if filteredEmpty && i == 1 {
+			ui.Row(c).Height(80).Center().Children(func() {
+				ui.Text(c, T("No songs match the filter")).FontSize(13.5).TextColor(a.pal.muted)
+			})
+			return
+		}
 		if i == rows-1 {
 			defer a.endMark(c)
 		}
-		if i > len(tracks) {
-			footer[i-len(tracks)-1](c)
+		if i > len(tracks)+extraRows {
+			footer[i-len(tracks)-1-extraRows](c)
 			return
 		}
-		a.trackRow(c, tracks, i-1, covers, pid)
+		a.trackRow(c, tracks, i-1-extraRows, covers, pid)
 	}).Grow(1).Padding(top+pageGap, pagePad-12, bottom+32, pagePad-12).ScrollbarInsets(top, 0, bottom, 0)
 }
 

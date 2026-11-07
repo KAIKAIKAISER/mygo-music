@@ -645,7 +645,11 @@ func (a *app) lyricsPane(c *ui.Context, tr *music.Track, h float32) {
 		scroll.Invisible()
 	}
 	defer a.quietCard(c, dim, h*0.18)
-	a.timedLines(c, scroll, lines, pos, cur, lag, linesStyle{size: 30, weight: 800, lineHeight: 1.25, quiet: quiet}, nil)
+	lyricSize := float32(30)
+	if a.settings.LyricsFontSize > 0 {
+		lyricSize = a.settings.LyricsFontSize
+	}
+	a.timedLines(c, scroll, lines, pos, cur, lag, linesStyle{size: lyricSize, weight: 800, lineHeight: 1.25, quiet: quiet}, nil)
 }
 
 // linesStyle is how timedLines sets its lines: the size, weight and
@@ -710,7 +714,11 @@ func (a *app) timedLines(c *ui.Context, scroll ui.Element, lines []lyrics.Line, 
 							ui.Text(c, l.Text).FontSize(st.size).FontWeight(st.weight).LineHeight(st.lineHeight).LetterSpacing(-0.4).TextColor(white)
 						}
 						if l.Translation != "" {
-							ui.Text(c, l.Translation).FontSize(17).FontWeight(600).TextColor(white.Alpha(0.7))
+							trSize := float32(17)
+							if st.size > 0 {
+								trSize = max(13, st.size*0.56)
+							}
+							ui.Text(c, l.Translation).FontSize(trSize).FontWeight(600).TextColor(white.Alpha(0.7))
 						}
 					})
 				})

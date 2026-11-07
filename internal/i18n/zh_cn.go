@@ -2,6 +2,14 @@ package i18n
 
 // zhCN is the app's text in Simplified Chinese, by its English.
 var zhCN = map[string]string{
+	"Lyrics Font Size":                                                                       "歌词字体大小",
+	"Adjust the font size of scrolling lyrics in Now Playing":                                "调整播放界面滚动歌词的字体大小",
+	"Small (24px)":                                                                           "小 (24px)",
+	"Standard (30px)":                                                                        "标准 (30px)",
+	"Large (36px)":                                                                           "大 (36px)",
+	"Extra Large (42px)":                                                                     "特大 (42px)",
+	"Search in playlist":                                                                     "搜索歌单歌曲",
+	"No songs match the filter":                                                              "没有找到匹配的歌曲",
 	"%.1f GB used":                 "已用 %.1f GB",
 	"%d MB used":                   "已用 %d MB",
 	"%d albums":                    "%d 张专辑",

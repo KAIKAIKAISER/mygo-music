@@ -426,6 +426,21 @@ func (a *app) settingsSections(c *ui.Context, p palette) []settingsSection {
 				a.changed()
 			}
 		})
+		row(T("Lyrics Font Size"), T("Adjust the font size of scrolling lyrics in Now Playing"), func() {
+			labels := []string{"Small (24px)", "Standard (30px)", "Large (36px)", "Extra Large (42px)"}
+			sizes := []float32{24, 30, 36, 42}
+			at := 1
+			for i, sz := range sizes {
+				if s.LyricsFontSize == sz {
+					at = i
+				}
+			}
+			if i, ok := choice(c, "lyrics-size", T("Lyrics Font Size"), labels, at); ok {
+				s.LyricsFontSize = sizes[i]
+				a.changed()
+			}
+		})
+
 	})
 
 	add("cache", T("Cache"), iconDatabase, func(row settingsRow, block settingsBlock) {
