@@ -325,34 +325,87 @@ func (p *Player) appendTracks(tracks []music.Track) {
 	}
 }
 
-// shuffleOrder shuffles the order, with first first.
+// shuffleOrder shuffles the order, with first first. If first < 0, all elements are shuffled.
 func (p *Player) shuffleOrder(first int) {
 	rand.Shuffle(len(p.order), func(i, j int) { p.order[i], p.order[j] = p.order[j], p.order[i] })
-	for i, v := range p.order {
-		if v == first {
-			p.order[0], p.order[i] = p.order[i], p.order[0]
+	if first >= 0 {
+		for i, v := range p.order {
+			if v == first {
+				p.order[0], p.order[i] = p.order[i], p.order[0]
+				break
+			}
 		}
 	}
 }
 
 func (p *Player) ToggleShuffle() {
 	p.shuffle = !p.shuffle
-	if len(p.order) == 0 {
-		return
-	}
-	cur := p.order[max(p.at, 0)]
 	if p.shuffle {
-		p.shuffleOrder(cur)
-		p.at = 0
-	} else {
-		for i := range p.order {
-			p.order[i] = i
+		if p.repeat == RepeatOff {
+			p.repeat = RepeatAll
 		}
-		p.at = cur
+		if len(p.order) > 0 {
+			cur := p.order[max(p.at, 0)]
+			p.shuffleOrder(cur)
+			p.at = 0
+		}
+	} else {
+		if len(p.order) > 0 {
+			cur := p.order[max(p.at, 0)]
+			for i := range p.order {
+				p.order[i] = i
+			}
+			p.at = cur
+		}
 	}
+	p.sync()
 }
 
-func (p *Player) CycleRepeat() { p.repeat = (p.repeat + 1) % 3 }
+func (p *Player) CycleRepeat() {
+	p.repeat = (p.repeat + 1) % 3
+	p.sync()
+}
+
+// CycleMode cycles through the four standard playback modes:
+// 1. RepeatAll (列表循环) -> Shuffle (随机播放)
+// 2. Shuffle (随机播放)   -> RepeatOne (单曲循环)
+// 3. RepeatOne (单曲循环) -> RepeatOff (顺序播放)
+// 4. RepeatOff (顺序播放) -> RepeatAll (列表循环)
+func (p *Player) CycleMode() {
+	if p.shuffle {
+		// Currently in Shuffle (随机播放) -> switch to RepeatOne (单曲循环)
+		p.shuffle = false
+		p.repeat = RepeatOne
+		if len(p.order) > 0 {
+			cur := p.order[max(p.at, 0)]
+			for i := range p.order {
+				p.order[i] = i
+			}
+			p.at = cur
+		}
+	} else {
+		switch p.repeat {
+		case RepeatAll:
+			// Currently in RepeatAll (列表循环) -> switch to Shuffle (随机播放)
+			p.shuffle = true
+			p.repeat = RepeatAll
+			if len(p.order) > 0 {
+				cur := p.order[max(p.at, 0)]
+				p.shuffleOrder(cur)
+				p.at = 0
+			}
+		case RepeatOne:
+			// Currently in RepeatOne (单曲循环) -> switch to RepeatOff (顺序播放)
+			p.shuffle = false
+			p.repeat = RepeatOff
+		case RepeatOff:
+			// Currently in RepeatOff (顺序播放) -> switch to RepeatAll (列表循环)
+			p.shuffle = false
+			p.repeat = RepeatAll
+		}
+	}
+	p.sync()
+}
 
 // Current returns the track playing or loading, or nil.
 func (p *Player) Current() *music.Track { return p.track }
@@ -411,6 +464,13 @@ func (p *Player) Next() {
 			return
 		}
 		at = 0
+		if p.shuffle && len(p.order) > 1 {
+			last := p.order[len(p.order)-1]
+			p.shuffleOrder(-1)
+			if p.order[0] == last {
+				p.order[0], p.order[1] = p.order[1], p.order[0]
+			}
+		}
 	}
 	p.load(at)
 }

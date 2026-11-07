@@ -329,15 +329,21 @@ func (a *app) transport(c *ui.Context, color, dim, on ui.Color, size float32) {
 		if iconButton(c.Key("next"), iconNext, size*0.85, color, T("Next")).Clicked() {
 			pl.Next()
 		}
-		repeat, ricon := dim, iconRepeat
-		switch pl.Repeat() {
-		case player.RepeatAll:
-			repeat = on
-		case player.RepeatOne:
-			repeat, ricon = on, iconRepeat1
+		modeColor, modeIcon, modeLabel := dim, iconRepeat, T("Sequential")
+		if pl.Shuffle() {
+			modeColor, modeIcon, modeLabel = on, iconShuffle, T("Shuffle")
+		} else {
+			switch pl.Repeat() {
+			case player.RepeatAll:
+				modeColor, modeIcon, modeLabel = on, iconRepeat, T("Repeat All")
+			case player.RepeatOne:
+				modeColor, modeIcon, modeLabel = on, iconRepeat1, T("Repeat One")
+			case player.RepeatOff:
+				modeColor, modeIcon, modeLabel = dim, iconRepeat, T("Sequential")
+			}
 		}
-		if iconButton(c.Key("repeat"), ricon, size*0.62, repeat, T("Repeat")).Clicked() {
-			pl.CycleRepeat()
+		if iconButton(c.Key("repeat"), modeIcon, size*0.62, modeColor, modeLabel).Clicked() {
+			pl.CycleMode()
 		}
 	})
 }
