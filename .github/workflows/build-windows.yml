@@ -68,7 +68,7 @@ jobs:
           NOTES="### 修复与更新特性 (Bug Fixes & Features)
           - **彻底去除桌面歌词外部边框与圆角阴影 (True Borderless & Frameless Desktop Lyrics)**:
             - 彻底消除 Windows 11 DWM 系统默认添加的圆角外框与阴影边缘。
-            - 禁用 DWM 非客户区边框渲染（`DWMWA_WINDOW_CORNER_PREFERENCE = DWMWCP_DONOTROUND`、`DWMWA_BORDER_COLOR = DWMWA_COLOR_NONE`、`DWMWA_NCRENDERING_POLICY = DWMNCRP_DISABLED`）。
+            - 禁用 DWM 非客户区边框渲染（\`DWMWA_WINDOW_CORNER_PREFERENCE = DWMWCP_DONOTROUND\`、\`DWMWA_BORDER_COLOR = DWMWA_COLOR_NONE\`、\`DWMWA_NCRENDERING_POLICY = DWMNCRP_DISABLED\`）。
             - 实现完全无多余边框、纯粹透明、如网易云音乐般丝滑融合桌面的悬浮歌词体验。
           - **桌面歌词全透明背景 (Full Transparent Desktop Lyrics Background)**:
             - 彻底去除悬停时的半透明深色底框，桌面歌词在任何时候均保持 100% 全透明呈现。
