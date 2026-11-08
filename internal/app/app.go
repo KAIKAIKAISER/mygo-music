@@ -34,6 +34,7 @@ const (
 	pageSavedAlbums
 	pageBrowse
 	pageSection
+	pageDownloads
 )
 
 type route struct {
@@ -173,6 +174,11 @@ type app struct {
 	// postFn, if set, takes what post would run on the main thread, as in
 	// tests, which have no window.
 	postFn func(func())
+	downloadMgr    *downloadManager
+	downloadSource *downloadSource
+	downloadFilter string
+	downloadFilterBox ui.Handle
+	downloadTab       int
 }
 
 // post runs fn on the main thread and redraws both windows. Without a
@@ -311,6 +317,9 @@ func pluginsDir() string { return userDataDir("plugins") }
 
 // sourceByID finds the source a track says it's of, for the player.
 func (a *app) sourceByID(id string) music.Source {
+	if id == "download" {
+		return a.downloadSource
+	}
 	if lib := a.libOf(id); lib != nil {
 		return lib.src
 	}
@@ -349,6 +358,8 @@ func Run() error {
 		// Before the window: on Windows it lays out its content as it is
 		// made, and the view asks the player what plays.
 		a.art = newArtCache(a.post)
+	a.downloadMgr = newDownloadManager(a)
+	a.downloadSource = &downloadSource{mgr: a.downloadMgr}
 		a.pl = player.New(a.post)
 		a.pl.Quiet = func(fn func()) { mygo.RunOnMain(fn) }
 		a.pl.Source = a.sourceByID

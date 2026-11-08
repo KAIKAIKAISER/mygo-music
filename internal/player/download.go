@@ -71,12 +71,17 @@ func (s *Song) Close() {
 // comes into a file of its own beside path first, so one cut short leaves path
 // as it was.
 func (s *Song) SaveTo(path string) error {
+	return s.SaveToWithProgress(path, nil)
+}
+
+// SaveToWithProgress writes the song to path while reporting downloaded bytes and total bytes.
+func (s *Song) SaveToWithProgress(path string, onProgress func(done, total int64)) error {
 	defer s.Close()
 	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+"-*.part")
 	if err != nil {
 		return err
 	}
-	err = s.copy(tmp)
+	err = s.copyWithProgress(tmp, onProgress)
 	if cerr := tmp.Close(); err == nil {
 		err = cerr
 	}
@@ -89,9 +94,41 @@ func (s *Song) SaveTo(path string) error {
 	return err
 }
 
+type progressWriter struct {
+	w          io.Writer
+	total      int64
+	done       int64
+	onProgress func(done, total int64)
+}
+
+func (pw *progressWriter) Write(p []byte) (int, error) {
+	n, err := pw.w.Write(p)
+	if n > 0 {
+		pw.done += int64(n)
+		if pw.onProgress != nil {
+			pw.onProgress(pw.done, pw.total)
+		}
+	}
+	return n, err
+}
+
 // copy writes all of the song to w.
 func (s *Song) copy(w io.Writer) error {
+	return s.copyWithProgress(w, nil)
+}
+
+// copyWithProgress writes all of the song to w with progress reporting.
+func (s *Song) copyWithProgress(w io.Writer, onProgress func(done, total int64)) error {
+	var total int64
 	if s.file != nil {
+		if fi, err := s.file.Stat(); err == nil {
+			total = fi.Size()
+		}
+		if onProgress != nil {
+			pw := &progressWriter{w: w, total: total, onProgress: onProgress}
+			_, err := io.Copy(pw, s.file)
+			return err
+		}
 		_, err := io.Copy(w, s.file)
 		return err
 	}
@@ -110,6 +147,15 @@ func (s *Song) copy(w io.Writer) error {
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
 		return errors.New(res.Status)
+	}
+	total = s.st.Size
+	if total <= 0 {
+		total = res.ContentLength
+	}
+	if onProgress != nil {
+		pw := &progressWriter{w: w, total: total, onProgress: onProgress}
+		_, err = io.Copy(pw, res.Body)
+		return err
 	}
 	_, err = io.Copy(w, res.Body)
 	return err

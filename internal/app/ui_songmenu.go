@@ -44,6 +44,17 @@ func (a *app) songItems(tr *music.Track, pid string) func(m *ui.Menu) {
 				a.download(*tr)
 			}
 		}
+		if tr.Source == "download" && a.downloadMgr != nil {
+			if it := a.downloadMgr.Get(tr.ID); it != nil {
+				m.Separator()
+				if m.Item(T("Open in Folder")).Chosen() {
+					openInFileManager(it.Path)
+				}
+				if m.Item(T("Delete Download")).Chosen() {
+					a.downloadMgr.Delete(it.ID, true)
+				}
+			}
+		}
 		// Its artists', album's and show's pages, those the source has.
 		linked := tr.Album.ID != "" && lib.can("album") || tr.ShowID != "" && lib.can("show")
 		for _, ar := range tr.Artists {

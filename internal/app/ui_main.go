@@ -229,6 +229,13 @@ func (a *app) sidebar(c *ui.Context) {
 			for _, n := range a.sidebarItems() {
 				a.navItem(c, n.icon, n.label, n.route)
 			}
+			if a.downloadMgr != nil {
+				dlLabel := T("Downloads")
+				if active := a.downloadMgr.ActiveCount(); active > 0 {
+					dlLabel = Tf("%s (%d)", T("Downloads"), active)
+				}
+				a.navItem(c, iconDownload, dlLabel, route{page: pageDownloads})
+			}
 			if a.searched.query != "" && a.searched.src == a.id {
 				a.navItem(c, iconSearch, T("Search Results"), a.searched)
 			}
@@ -380,6 +387,7 @@ func (a *app) content(c *ui.Context) {
 	if a.scrolled != a.route {
 		a.trackList, a.pageScroll, a.scrolled = ui.ListState{}, ui.ScrollState{}, a.route
 		a.playlistFilter = ""
+		a.downloadFilter = ""
 	}
 	// Pages mark where their content is, as they scroll.
 	a.underTop, a.underBottom = false, false
@@ -408,6 +416,8 @@ func (a *app) content(c *ui.Context) {
 		a.browsePage(c)
 	case pageSection:
 		a.sectionPage(c)
+	case pageDownloads:
+		a.downloadsPage(c)
 	}
 }
 
@@ -602,6 +612,7 @@ var builtinPages = map[string]struct {
 	"savedAlbums": {pageSavedAlbums, "savedAlbums", "Saved Albums", func() *ui.SVG { return iconAlbum }},
 	"stations":    {pageStations, "stations", "Radio", func() *ui.SVG { return iconRadio }},
 	"shows":       {pageShows, "shows", "Podcasts", func() *ui.SVG { return iconPodcast }},
+	"downloads":   {pageDownloads, "", "Downloads", func() *ui.SVG { return iconDownload }},
 }
 
 // sidebarItems is what the source's Navigation says the sidebar has, or else an

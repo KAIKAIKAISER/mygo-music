@@ -55,7 +55,7 @@ jobs:
           if [ -n "$GITHUB_REF_NAME" ] && [[ "$GITHUB_REF_NAME" == v* ]]; then
             TAG="$GITHUB_REF_NAME"
           else
-            TAG="v0.1.30"
+            TAG="v0.1.31"
           fi
 
           mkdir -p release_assets
@@ -65,25 +65,22 @@ jobs:
           echo "Release assets prepared:"
           ls -la release_assets/
 
-          NOTES="### 修复与更新特性 (Bug Fixes & Features)
-          - **桌面歌词窗口尺寸随歌词长度动态伸缩变换 (Dynamic Window Sizing & Auto Transformation)**:
-            - 彻底移除固定 1024px/880px 僵硬边界；歌词短时窗口自动收敛紧凑（如 380px~520px），不遮挡多余屏幕空间。
-            - 歌词较长时，窗口宽度根据文字实际像素尺寸自动平滑展开变宽，与歌词内容自适应融合。
-          - **超出屏幕范围自动换行与高度自适应伸缩 (Auto-wrap & Dynamic Height on Screen Edge)**:
-            - 取消单行截断（SingleLine）限制。当长歌词（如双语翻译）超出屏幕可视边界时，自动折行换行居中展示，彻底杜绝文字被屏幕物理边缘切断或丢字。
-            - 窗口高度随换行行数动态自适应扩展，确保多行与翻译内容全部完整清晰展现。
-          - **自由拖拽与智能平滑居中（告别死锁固定边界）**:
-            - 彻底解决拖拽歌词时被强制锁死在屏幕边缘的问题，用户可随心所欲在桌面任意位置拖拽停放。
-            - 歌词变换时长短伸缩以拖拽中心点对称展开，并智能确保左/右/顶/底边缘始终在显示器可视工作区内。
-          - **彻底去除桌面歌词外部边框与圆角阴影 (True Borderless & Frameless Desktop Lyrics)**:
-            - 彻底消除 Windows 11 DWM 系统默认添加的圆角外框与阴影边缘，实现纯粹透明无边框悬浮。
-          - **桌面歌词全透明背景与锁定状态悬浮一键解锁 (Transparent Background & Hover Unlock)**:
-            - 无论任何状态均保持 100% 透明无底色；锁定时鼠标移动到歌词区域浮现【🔓 解锁歌词】按钮直接点击解锁。
-          - **本地音乐支持歌名与歌手搜索 + 自动匹配网易云高清封面和逐字歌词 (Local Music Search & NetEase Matching)**:
-            - 本地音乐即时搜索过滤；播放本地歌曲缺失信息时自动检索网易云匹配。
+          NOTES="### 新特性与更新内容 (New Features & Improvements)
+          - **全新下载管理页面 (Full-featured Download Management Page)**:
+            - 左侧边栏新增常驻【下载管理】导航入口，实时动态展示后台正在下载的任务数量徽标。
+            - 拥有专属渐变质感头部卡片，统计已下载歌曲总数与本地磁盘空间占用（如 \`15 首歌曲 · 已占用 145.8 MB\`）。
+            - 支持自定义下载目录：可随时点击【更改目录】选择任意本地文件夹，配置自动保存记忆；支持一键【打开目录】在系统资源管理器中浏览。
+          - **双标签页分类管理 (Tabbed Views: Downloaded & Downloading)**:
+            - **已下载 (X)**：收录全部已下载单曲，支持歌名/歌手即时关键词过滤搜索；支持一键【播放全部】与【随机播放】；悬浮歌曲行可一键【在文件夹中显示】快速定位高亮本地文件，支持一键删除与清空记录。
+            - **正在下载 (Y)**：实时展示排队等待中与下载中的任务，动态呈现精致平滑的进度条、已下载字节数 / 总字节数与实时百分比；支持单个或全部取消，下载失败任务支持一键重试与清理。
+          - **静默后台队列下载 (Seamless Background Queue Download)**:
+            - 歌曲右键菜单点击【下载…】告别繁琐的另存为弹窗交互，直接静默入队下载。
+            - 下载音频的同时自动获取并保存同名伴随歌词文件（\`.lrc\`），实现完整的离线歌词体验。
+          - **原生完全脱网离线播放 (Offline Playback Support)**:
+            - 下载完成的曲目支持在无网络环境下原生播放，直接读取本地音频流与本地 LRC 歌词，彻底免除在线依赖。
 
           ### 包含文件 (Files)
-          - \`mygo-music-setup-0.1.30-amd64.exe\`: Windows 官方风格安装程序 (NSIS Installer)
+          - \`mygo-music-setup-0.1.31-amd64.exe\`: Windows 官方风格安装程序 (NSIS Installer)
           - \`MyGo.Music.exe\`: Windows 64位独立便携版 (绿色免安装)"
 
           if gh release view "$TAG" > /dev/null 2>&1; then

@@ -42,6 +42,10 @@ func (a *app) canDownload(tr *music.Track) bool {
 // download saves a copy of tr where the listener picks, at the quality the
 // settings say, from the cache if it's kept there; toasts say how it goes.
 func (a *app) download(tr music.Track) {
+	if a.downloadMgr != nil {
+		a.downloadMgr.Queue(tr, a.settings.Quality)
+		return
+	}
 	lib := a.trackLib(&tr)
 	quality := a.settings.Quality
 	go func() {
