@@ -75,9 +75,14 @@ func (s *Song) SaveTo(path string) error {
 }
 
 // SaveToWithProgress writes the song to path while reporting downloaded bytes and total bytes.
-func (s *Song) SaveToWithProgress(path string, onProgress func(done, total int64)) error {
+// If onProgress returns false, the download is cancelled.
+func (s *Song) SaveToWithProgress(path string, onProgress func(done, total int64) bool) error {
 	defer s.Close()
-	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+"-*.part")
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(dir, "mygo-dl-*.part")
 	if err != nil {
 		return err
 	}
@@ -86,6 +91,7 @@ func (s *Song) SaveToWithProgress(path string, onProgress func(done, total int64
 		err = cerr
 	}
 	if err == nil {
+		_ = os.Remove(path)
 		err = os.Rename(tmp.Name(), path)
 	}
 	if err != nil {
@@ -98,7 +104,7 @@ type progressWriter struct {
 	w          io.Writer
 	total      int64
 	done       int64
-	onProgress func(done, total int64)
+	onProgress func(done, total int64) bool
 }
 
 func (pw *progressWriter) Write(p []byte) (int, error) {
@@ -106,7 +112,9 @@ func (pw *progressWriter) Write(p []byte) (int, error) {
 	if n > 0 {
 		pw.done += int64(n)
 		if pw.onProgress != nil {
-			pw.onProgress(pw.done, pw.total)
+			if !pw.onProgress(pw.done, pw.total) {
+				return n, errors.New("download cancelled")
+			}
 		}
 	}
 	return n, err
@@ -118,7 +126,7 @@ func (s *Song) copy(w io.Writer) error {
 }
 
 // copyWithProgress writes all of the song to w with progress reporting.
-func (s *Song) copyWithProgress(w io.Writer, onProgress func(done, total int64)) error {
+func (s *Song) copyWithProgress(w io.Writer, onProgress func(done, total int64) bool) error {
 	var total int64
 	if s.file != nil {
 		if fi, err := s.file.Stat(); err == nil {

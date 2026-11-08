@@ -121,19 +121,26 @@ func (dm *downloadManager) load() {
 	}
 }
 
-func (dm *downloadManager) save() {
+// saveLocked writes downloads.json. The caller MUST hold dm.mu.
+func (dm *downloadManager) saveLocked() {
 	p := dm.path()
 	if p == "" {
 		return
 	}
-	dm.mu.RLock()
 	data, err := json.MarshalIndent(dm.items, "", "  ")
-	dm.mu.RUnlock()
 	if err != nil {
 		return
 	}
-	_ = os.MkdirAll(filepath.Dir(p), 0o755)
-	_ = os.WriteFile(p, data, 0o644)
+	go func() {
+		_ = os.MkdirAll(filepath.Dir(p), 0o755)
+		_ = os.WriteFile(p, data, 0o644)
+	}()
+}
+
+func (dm *downloadManager) save() {
+	dm.mu.Lock()
+	defer dm.mu.Unlock()
+	dm.saveLocked()
 }
 
 func (a *app) downloadDir() string {
@@ -189,7 +196,7 @@ func (dm *downloadManager) Queue(tr music.Track, quality string) {
 		CreatedAt: time.Now(),
 	}
 	dm.items = append([]*DownloadItem{item}, dm.items...)
-	dm.save()
+	dm.saveLocked()
 	dm.mu.Unlock()
 
 	dm.a.post(func() {
@@ -222,7 +229,7 @@ func (dm *downloadManager) processQueue() {
 	next.Status = DownloadActive
 	next.Error = ""
 	dm.active++
-	dm.save()
+	dm.saveLocked()
 	dm.mu.Unlock()
 
 	dm.a.post(func() {
@@ -236,7 +243,7 @@ func (dm *downloadManager) downloadWorker(item *DownloadItem) {
 	defer func() {
 		dm.mu.Lock()
 		dm.active--
-		dm.save()
+		dm.saveLocked()
 		dm.mu.Unlock()
 		dm.a.post(func() {
 			dm.a.redraw()
@@ -247,8 +254,11 @@ func (dm *downloadManager) downloadWorker(item *DownloadItem) {
 	a := dm.a
 	lib := a.trackLib(&item.Track)
 	if lib == nil || lib.src == nil {
+		dm.mu.Lock()
 		item.Status = DownloadFailed
 		item.Error = "No source available"
+		dm.saveLocked()
+		dm.mu.Unlock()
 		return
 	}
 
@@ -258,8 +268,11 @@ func (dm *downloadManager) downloadWorker(item *DownloadItem) {
 	}
 	song, err := a.pl.FindSong(lib.src, item.Track, quality)
 	if err != nil {
+		dm.mu.Lock()
 		item.Status = DownloadFailed
 		item.Error = err.Error()
+		dm.saveLocked()
+		dm.mu.Unlock()
 		a.post(func() {
 			a.toast = Tf("Download failed: %s", item.Track.Name)
 		})
@@ -275,11 +288,11 @@ func (dm *downloadManager) downloadWorker(item *DownloadItem) {
 	item.Path = targetPath
 	var lastUIUpdate time.Time
 
-	err = song.SaveToWithProgress(targetPath, func(done, total int64) {
+	err = song.SaveToWithProgress(targetPath, func(done, total int64) bool {
 		dm.mu.Lock()
 		if item.Status == DownloadCancelled {
 			dm.mu.Unlock()
-			return
+			return false
 		}
 		item.BytesDone = done
 		if total > 0 {
@@ -289,7 +302,7 @@ func (dm *downloadManager) downloadWorker(item *DownloadItem) {
 		dm.mu.Unlock()
 
 		now := time.Now()
-		if now.Sub(lastUIUpdate) >= 120*time.Millisecond {
+		if now.Sub(lastUIUpdate) >= 200*time.Millisecond {
 			lastUIUpdate = now
 			a.post(func() {
 				if a.route.page == pageDownloads {
@@ -297,10 +310,12 @@ func (dm *downloadManager) downloadWorker(item *DownloadItem) {
 				}
 			})
 		}
+		return true
 	})
 
 	dm.mu.Lock()
 	if item.Status == DownloadCancelled {
+		dm.saveLocked()
 		dm.mu.Unlock()
 		_ = os.Remove(targetPath)
 		return
@@ -309,6 +324,7 @@ func (dm *downloadManager) downloadWorker(item *DownloadItem) {
 	if err != nil {
 		item.Status = DownloadFailed
 		item.Error = err.Error()
+		dm.saveLocked()
 		dm.mu.Unlock()
 		a.post(func() {
 			a.toast = Tf("Download failed: %s", item.Track.Name)
@@ -332,6 +348,7 @@ func (dm *downloadManager) downloadWorker(item *DownloadItem) {
 	item.Progress = 1.0
 	item.Status = DownloadDone
 	item.CompletedAt = time.Now()
+	dm.saveLocked()
 	dm.mu.Unlock()
 
 	a.post(func() {
@@ -350,9 +367,11 @@ func (dm *downloadManager) Cancel(id string) {
 			break
 		}
 	}
-	dm.save()
+	dm.saveLocked()
 	dm.mu.Unlock()
-	dm.a.redraw()
+	dm.a.post(func() {
+		dm.a.redraw()
+	})
 }
 
 func (dm *downloadManager) Retry(id string) {
@@ -366,9 +385,11 @@ func (dm *downloadManager) Retry(id string) {
 			break
 		}
 	}
-	dm.save()
+	dm.saveLocked()
 	dm.mu.Unlock()
-	dm.a.redraw()
+	dm.a.post(func() {
+		dm.a.redraw()
+	})
 	dm.processQueue()
 }
 
@@ -382,14 +403,16 @@ func (dm *downloadManager) Delete(id string, deleteFile bool) {
 			break
 		}
 	}
-	dm.save()
+	dm.saveLocked()
 	dm.mu.Unlock()
 
 	if deleteFile && path != "" {
 		_ = os.Remove(path)
 		_ = os.Remove(strings.TrimSuffix(path, filepath.Ext(path)) + ".lrc")
 	}
-	dm.a.redraw()
+	dm.a.post(func() {
+		dm.a.redraw()
+	})
 }
 
 func (dm *downloadManager) ClearCompleted() {
@@ -401,9 +424,11 @@ func (dm *downloadManager) ClearCompleted() {
 		}
 	}
 	dm.items = remaining
-	dm.save()
+	dm.saveLocked()
 	dm.mu.Unlock()
-	dm.a.redraw()
+	dm.a.post(func() {
+		dm.a.redraw()
+	})
 }
 
 func (dm *downloadManager) ActiveCount() int {

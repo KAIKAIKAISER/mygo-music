@@ -43,7 +43,7 @@ func (a *app) canDownload(tr *music.Track) bool {
 // settings say, from the cache if it's kept there; toasts say how it goes.
 func (a *app) download(tr music.Track) {
 	if a.downloadMgr != nil {
-		a.downloadMgr.Queue(tr, a.settings.Quality)
+		go a.downloadMgr.Queue(tr, a.settings.Quality)
 		return
 	}
 	lib := a.trackLib(&tr)

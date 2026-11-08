@@ -55,7 +55,7 @@ jobs:
           if [ -n "$GITHUB_REF_NAME" ] && [[ "$GITHUB_REF_NAME" == v* ]]; then
             TAG="$GITHUB_REF_NAME"
           else
-            TAG="v0.1.31"
+            TAG="v0.1.32"
           fi
 
           mkdir -p release_assets
@@ -65,22 +65,19 @@ jobs:
           echo "Release assets prepared:"
           ls -la release_assets/
 
-          NOTES="### 新特性与更新内容 (New Features & Improvements)
-          - **全新下载管理页面 (Full-featured Download Management Page)**:
-            - 左侧边栏新增常驻【下载管理】导航入口，实时动态展示后台正在下载的任务数量徽标。
-            - 拥有专属渐变质感头部卡片，统计已下载歌曲总数与本地磁盘空间占用（如 \`15 首歌曲 · 已占用 145.8 MB\`）。
-            - 支持自定义下载目录：可随时点击【更改目录】选择任意本地文件夹，配置自动保存记忆；支持一键【打开目录】在系统资源管理器中浏览。
-          - **双标签页分类管理 (Tabbed Views: Downloaded & Downloading)**:
-            - **已下载 (X)**：收录全部已下载单曲，支持歌名/歌手即时关键词过滤搜索；支持一键【播放全部】与【随机播放】；悬浮歌曲行可一键【在文件夹中显示】快速定位高亮本地文件，支持一键删除与清空记录。
-            - **正在下载 (Y)**：实时展示排队等待中与下载中的任务，动态呈现精致平滑的进度条、已下载字节数 / 总字节数与实时百分比；支持单个或全部取消，下载失败任务支持一键重试与清理。
-          - **静默后台队列下载 (Seamless Background Queue Download)**:
-            - 歌曲右键菜单点击【下载…】告别繁琐的另存为弹窗交互，直接静默入队下载。
-            - 下载音频的同时自动获取并保存同名伴随歌词文件（\`.lrc\`），实现完整的离线歌词体验。
-          - **原生完全脱网离线播放 (Offline Playback Support)**:
-            - 下载完成的曲目支持在无网络环境下原生播放，直接读取本地音频流与本地 LRC 歌词，彻底免除在线依赖。
+          NOTES="### 紧急修复与改进 (Critical Fixes & Improvements)
+          - **彻底修复点击歌曲下载后界面直接卡死锁死的问题 (Fix Deadlock on Song Download)**:
+            - **死锁根因**：\`downloadManager.Queue\` 在持有排他互斥写锁 (\`dm.mu.Lock\`) 状态下，直接调用了试图获取共享读锁 (\`dm.mu.RLock\`) 的持久化方法 \`save()\`。由于 Go 语言标准库 \`sync.RWMutex\` 不支持锁重入，导致主 UI 线程当场死锁挂死。
+            - **锁机制重构**：将所有锁内操作规范为非阻塞的 \`saveLocked()\`，并在后台独立 goroutine 中异步完成 JSON 序列化与文件落盘，彻底解决死锁问题。
+            - **主线程非阻塞入队**：右键菜单触发下载改为异步后台入队，不阻塞原生主事件循环。
+            - **下载写入与取消容错**：优化进度汇报与取消机制，取消任务时实时中断网络传输；优化 Windows 平台下临时分块文件 (\`*.part\`) 创建与目标文件重命名覆盖机制。
+          - **全新下载管理中心 (Download Management)**:
+            - 侧边栏常驻入口与实时下载任务数量动态徽标。
+            - 双标签页管理（【已下载】与【正在下载】），支持播放、在系统文件管理器中快速定位、批量取消与重试。
+            - 自动下载并保存伴随本地歌词 (\`.lrc\`)，实现原生完全脱网离线畅听。
 
           ### 包含文件 (Files)
-          - \`mygo-music-setup-0.1.31-amd64.exe\`: Windows 官方风格安装程序 (NSIS Installer)
+          - \`mygo-music-setup-0.1.32-amd64.exe\`: Windows 官方风格安装程序 (NSIS Installer)
           - \`MyGo.Music.exe\`: Windows 64位独立便携版 (绿色免安装)"
 
           if gh release view "$TAG" > /dev/null 2>&1; then
