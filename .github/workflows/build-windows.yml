@@ -55,7 +55,7 @@ jobs:
           if [ -n "$GITHUB_REF_NAME" ] && [[ "$GITHUB_REF_NAME" == v* ]]; then
             TAG="$GITHUB_REF_NAME"
           else
-            TAG="v0.1.28"
+            TAG="v0.1.29"
           fi
 
           mkdir -p release_assets
@@ -66,6 +66,13 @@ jobs:
           ls -la release_assets/
 
           NOTES="### 修复与更新特性 (Bug Fixes & Features)
+          - **桌面歌词全屏边界防越界与自动回弹 (Screen Edge Auto-Adjustment)**:
+            - 歌词窗口在任何移动、缩放或长歌词展开时，均实时检测当前显示器的可用工作区（WorkArea）。
+            - 当歌词窗口超出屏幕右侧、左侧、顶部或底部边缘时，系统自动回弹并调整窗口坐标，确保歌词 100% 完整显示在屏幕可视区域之内，绝不被显示器物理边缘截断。
+          - **桌面歌词双重自适应：自适应字号缩放 + 动态宽度扩容 (Dual Adaptive Lyrics)**:
+            - 实时精确测量每句歌词的排版像素宽度。
+            - 若歌词文本较长（如双语翻译或超长歌词），窗口在屏幕允许范围内自动适度拓宽（基准默认扩至 1024px，最高可自适应至屏幕宽度）。
+            - 若歌词依然超出可视宽度，自动动态按比例微缩字号，确保整行文字平滑完整展现，彻底解决右侧文字截断或丢字问题。
           - **彻底去除桌面歌词外部边框与圆角阴影 (True Borderless & Frameless Desktop Lyrics)**:
             - 彻底消除 Windows 11 DWM 系统默认添加的圆角外框与阴影边缘。
             - 禁用 DWM 非客户区边框渲染（\`DWMWA_WINDOW_CORNER_PREFERENCE = DWMWCP_DONOTROUND\`、\`DWMWA_BORDER_COLOR = DWMWA_COLOR_NONE\`、\`DWMWA_NCRENDERING_POLICY = DWMNCRP_DISABLED\`）。
@@ -90,7 +97,7 @@ jobs:
             - 双击已播放或加载中的曲目平滑保持播放，暂停状态平滑恢复播放，避免重复中断。
 
           ### 包含文件 (Files)
-          - \`mygo-music-setup-0.1.28-amd64.exe\`: Windows 官方风格安装程序 (NSIS Installer)
+          - \`mygo-music-setup-0.1.29-amd64.exe\`: Windows 官方风格安装程序 (NSIS Installer)
           - \`MyGo.Music.exe\`: Windows 64位独立便携版 (绿色免安装)"
 
           if gh release view "$TAG" > /dev/null 2>&1; then
