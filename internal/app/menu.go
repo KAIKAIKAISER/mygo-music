@@ -65,6 +65,9 @@ func (a *app) setMenu() {
 			{Label: T("Shuffle"), Click: run(func() { a.pl.ToggleShuffle() })},
 			{Label: T("Change Playback Mode"), Click: run(func() { a.pl.CycleMode() })},
 			mygo.Separator(),
+			{Label: T("Desktop Lyrics"), Accelerator: "CmdOrCtrl+Shift+D", Click: run(a.toggleDesktopLyrics)},
+			{Label: T("Lock/Unlock Desktop Lyrics"), Accelerator: "CmdOrCtrl+Shift+L", Click: run(a.toggleDesktopLyricsLock)},
+			mygo.Separator(),
 			{Label: T("Now Playing"), Accelerator: "CmdOrCtrl+L", Click: run(func() {
 				a.showMain()
 				a.nowPlaying = !a.nowPlaying && a.pl.Current() != nil

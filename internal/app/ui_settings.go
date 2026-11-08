@@ -377,6 +377,72 @@ func (a *app) settingsSections(c *ui.Context, p palette) []settingsSection {
 
 	add("plugins", T("Plugins"), iconPlug, func(row settingsRow, block settingsBlock) { a.sourceSettings(c, row, block, p) })
 
+	add("desktop-lyrics", T("Desktop Lyrics"), iconDesktopLyrics, func(row settingsRow, block settingsBlock) {
+		row(T("Desktop Lyrics"), T("Show floating lyrics on your desktop that stay on top of other windows"), func() {
+			if ui.Switch(c.Key("desktop-lyrics-on"), &s.DesktopLyrics).Label(T("Show Desktop Lyrics")).Changed() {
+				a.changed()
+				a.setDesktopLyrics(s.DesktopLyrics)
+			}
+		})
+		row(T("Lock Lyrics"), T("When locked, mouse clicks pass through the lyrics window so it won't interfere with other tasks"), func() {
+			if ui.Switch(c.Key("desktop-lyrics-lock"), &s.DesktopLyricsLocked).Label(T("Lock Lyrics")).Disabled(!s.DesktopLyrics).Changed() {
+				a.changed()
+				a.setDesktopLyricsLocked(s.DesktopLyricsLocked)
+			}
+		})
+		row(T("Lyrics Color"), T("Select the color theme for desktop lyrics"), func() {
+			labels := make([]string, len(lyricsThemes))
+			at := 0
+			for i, th := range lyricsThemes {
+				labels[i] = T(th.name)
+				if th.id == s.DesktopLyricsColor {
+					at = i
+				}
+			}
+			if i, ok := choice(c, "lyrics-color", T("Lyrics Color"), labels, at); ok {
+				s.DesktopLyricsColor = lyricsThemes[i].id
+				a.changed()
+				if a.desktopLyrics != nil && a.desktopLyrics.win != nil {
+					a.desktopLyrics.win.Invalidate()
+				}
+			}
+		})
+		row(T("Lyrics Font"), T("Select the font for desktop lyrics (defaults to consistent with the client)"), func() {
+			labels := make([]string, len(lyricsFonts))
+			at := 0
+			for i, ft := range lyricsFonts {
+				labels[i] = T(ft.label)
+				if ft.id == s.DesktopLyricsFont {
+					at = i
+				}
+			}
+			if i, ok := choice(c, "lyrics-font", T("Lyrics Font"), labels, at); ok {
+				s.DesktopLyricsFont = lyricsFonts[i].id
+				a.changed()
+				if a.desktopLyrics != nil && a.desktopLyrics.win != nil {
+					a.desktopLyrics.win.Invalidate()
+				}
+			}
+		})
+		row(T("Desktop Lyrics Font Size"), T("Adjust font size of desktop lyrics"), func() {
+			labels := make([]string, len(lyricsFontSizes))
+			at := 2
+			for i, sz := range lyricsFontSizes {
+				labels[i] = T(sz.label)
+				if sz.size == s.DesktopLyricsFontSize {
+					at = i
+				}
+			}
+			if i, ok := choice(c, "desktop-lyrics-size", T("Desktop Lyrics Font Size"), labels, at); ok {
+				s.DesktopLyricsFontSize = lyricsFontSizes[i].size
+				a.changed()
+				if a.desktopLyrics != nil && a.desktopLyrics.win != nil {
+					a.desktopLyrics.win.Invalidate()
+				}
+			}
+		})
+	})
+
 	// Only on macOS, the one with a notch player.
 	if a.notch != nil {
 		add("notch", T("Notch Player"), iconLaptop, func(row settingsRow, block settingsBlock) {

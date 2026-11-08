@@ -58,6 +58,18 @@ type settings struct {
 	LyricsStage bool `json:"lyricsStage"`
 	// LyricsFontSize is the font size of scrolling lyrics in Now Playing: 0 uses default (30).
 	LyricsFontSize float32 `json:"lyricsFontSize,omitempty"`
+	// DesktopLyrics shows floating lyrics on the desktop.
+	DesktopLyrics bool `json:"desktopLyrics"`
+	// DesktopLyricsLocked locks the desktop lyrics window so clicks pass through.
+	DesktopLyricsLocked bool `json:"desktopLyricsLocked"`
+	// DesktopLyricsColor is the color theme: "gold", "cyan", "red", "green", "pink", "white". Default "gold".
+	DesktopLyricsColor string `json:"desktopLyricsColor,omitempty"`
+	// DesktopLyricsFont is the font family for desktop lyrics. Default "" (consistent with client).
+	DesktopLyricsFont string `json:"desktopLyricsFont,omitempty"`
+	// DesktopLyricsFontSize is the font size: 0 uses default (32).
+	DesktopLyricsFontSize float32 `json:"desktopLyricsFontSize,omitempty"`
+	// DesktopLyricsTwoLines shows two lines of lyrics (current line + next line). Default true.
+	DesktopLyricsTwoLines bool `json:"desktopLyricsTwoLines"`
 	// StageStyle is how the stage sets its lyrics (stageStyles): empty for
 	// Folia's classic, or the id of another of its visualizers.
 	StageStyle string `json:"stageStyle,omitempty"`
@@ -90,7 +102,7 @@ type settings struct {
 }
 
 func defaultSettings() settings {
-	return settings{Language: i18n.System, NotchActivity: true, Quality: "high", Appearance: "system", Volume: 0.8, Normalize: true, AppIcon: "dock-and-menubar", CacheMB: 2048}
+	return settings{Language: i18n.System, NotchActivity: true, Quality: "high", Appearance: "system", Volume: 0.8, Normalize: true, AppIcon: "dock-and-menubar", CacheMB: 2048, DesktopLyricsColor: "gold", DesktopLyricsFontSize: 32, DesktopLyricsTwoLines: true}
 }
 
 func settingsPath() (string, error) {

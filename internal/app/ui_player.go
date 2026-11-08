@@ -433,6 +433,21 @@ func (a *app) playerBar(c *ui.Context) {
 
 		// Lyrics and volume.
 		ui.Row(c).Grow(1).Basis(0).MinWidth(controls).Justify(ui.End).AlignItems(ui.Center).Gap(4).Children(func() {
+			dtLyr := p.muted
+			dtLabel := T("Desktop Lyrics")
+			if a.settings.DesktopLyrics {
+				dtLyr = p.accent
+				if a.settings.DesktopLyricsLocked {
+					dtLabel = T("Desktop Lyrics (Locked, click to unlock)")
+				}
+			}
+			if iconButton(c.Key("desktop-lyrics"), iconDesktopLyrics, 16, dtLyr, dtLabel).Clicked() {
+				if a.settings.DesktopLyrics && a.settings.DesktopLyricsLocked {
+					a.setDesktopLyricsLocked(false)
+				} else {
+					a.toggleDesktopLyrics()
+				}
+			}
 			lyr := p.muted
 			if a.nowPlaying {
 				lyr = p.accent

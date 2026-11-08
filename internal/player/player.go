@@ -13,6 +13,7 @@ import (
 	"mygo-music/internal/i18n"
 	"mygo-music/internal/lyrics"
 	"mygo-music/internal/music"
+	"mygo-music/internal/netease"
 )
 
 type RepeatMode int
@@ -802,6 +803,28 @@ func (p *Player) loadSkipping(at, skipped, dir int, play bool, from time.Duratio
 // loadCover shows the system the cover of t, once it has it.
 func (p *Player) loadCover(gen int, t *music.Track) {
 	url := t.Album.ImageURL
+	if url == "" && t.Source == "local" {
+		go func() {
+			match := netease.Match(t.ArtistNames(), t.Name)
+			if match != nil && match.CoverURL != "" {
+				p.post(func() {
+					if gen == p.gen {
+						t.Album.ImageURL = match.CoverURL
+						p.sync()
+					}
+				})
+				cover, err := music.Fetch(music.SizedImage(match.CoverURL, 600))
+				if err == nil {
+					p.post(func() {
+						if gen == p.gen {
+							p.announce(t, cover)
+						}
+					})
+				}
+			}
+		}()
+		return
+	}
 	if url == "" {
 		return
 	}
@@ -825,6 +848,23 @@ func (p *Player) loadLyrics(gen int, src music.Source, t music.Track) {
 		if src != nil && src.Can("lyrics") {
 			if l, err := src.Lyrics(t.ID); err == nil && l != nil {
 				lines = lyrics.FromSource(l)
+			}
+		}
+		if len(lines) == 0 && t.Source == "local" {
+			match := netease.Match(t.ArtistNames(), t.Name)
+			if match != nil && match.LyricsLRC != "" {
+				lines = lyrics.FromSource(&music.Lyrics{
+					LRC:         match.LyricsLRC,
+					Translation: match.Translation,
+				})
+				if t.Album.ImageURL == "" && match.CoverURL != "" {
+					p.post(func() {
+						if gen == p.gen {
+							t.Album.ImageURL = match.CoverURL
+							p.sync()
+						}
+					})
+				}
 			}
 		}
 		p.post(func() {

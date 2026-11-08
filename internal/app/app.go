@@ -55,6 +55,7 @@ type route struct {
 type app struct {
 	win   *mygo.Window
 	notch *notch
+	desktopLyrics *desktopLyrics
 	tray  *mygo.Tray // the icon in the menu bar or notification area, while it shows
 	art   *artCache
 	pl    *player.Player
@@ -199,6 +200,9 @@ func (a *app) redraw() {
 	}
 	if a.settingsWin != nil {
 		a.settingsWin.Invalidate()
+	}
+	if a.desktopLyrics != nil {
+		a.desktopLyrics.redraw()
 	}
 }
 
@@ -355,6 +359,9 @@ func Run() error {
 		a.pl.Changed = func() {
 			a.keepSession()
 			a.syncCaptions()
+			if a.desktopLyrics != nil {
+				a.desktopLyrics.redraw()
+			}
 		}
 		a.volume = a.settings.Volume
 		a.pl.SetVolume(a.volume)
@@ -382,6 +389,7 @@ func Run() error {
 		if runtime.GOOS == "darwin" {
 			a.notch = newNotch(a)
 		}
+		a.desktopLyrics = newDesktopLyrics(a)
 		// From the menu bar alone, the Dock icon shows while the window
 		// does.
 		a.syncDock()
