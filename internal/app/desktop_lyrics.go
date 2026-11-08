@@ -99,22 +99,27 @@ func newDesktopLyrics(a *app) *desktopLyrics {
 	}
 
 	d.win = mygo.NewWindow(mygo.WindowOptions{
-		Title:         Tf("%s Desktop Lyrics", mygo.App.Name()),
-		Panel:         true,
-		Hidden:        true,
+		Title:           Tf("%s Desktop Lyrics", mygo.App.Name()),
+		Hidden:          true,
 		Frameless:       true,
 		Transparent:     true,
 		BackgroundColor: "transparent",
 		AlwaysOnTop:     true,
-		DisableShadow: true,
-		DisableResize: true,
-		SkipTaskbar:   true,
-		StateKey:      "desktop-lyrics",
-		X:             int(d.screenX),
-		Y:             int(d.screenY),
-		Width:         int(d.w),
-		Height:        int(d.h),
-		Content:       ui.View(d.view),
+		DisableShadow:   true,
+		DisableResize:   true,
+		SkipTaskbar:     true,
+		StateKey:        "desktop-lyrics",
+		X:               int(d.screenX),
+		Y:               int(d.screenY),
+		Width:           int(d.w),
+		Height:          int(d.h),
+		Content:         ui.View(d.view),
+	})
+
+	removeWindowBorder(d.win.NativeHandle())
+
+	d.win.OnShow(func() {
+		removeWindowBorder(d.win.NativeHandle())
 	})
 
 	d.win.OnClose(func(e *mygo.CloseEvent) {
@@ -125,6 +130,7 @@ func newDesktopLyrics(a *app) *desktopLyrics {
 	})
 
 	if a.settings.DesktopLyrics {
+		removeWindowBorder(d.win.NativeHandle())
 		d.win.ShowInactive()
 		d.applyLock(a.settings.DesktopLyricsLocked)
 	}
@@ -134,6 +140,7 @@ func newDesktopLyrics(a *app) *desktopLyrics {
 
 func (d *desktopLyrics) show() {
 	if d.win != nil {
+		removeWindowBorder(d.win.NativeHandle())
 		d.win.ShowInactive()
 		d.applyLock(d.a.settings.DesktopLyricsLocked)
 	}

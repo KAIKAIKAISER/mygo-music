@@ -55,7 +55,7 @@ jobs:
           if [ -n "$GITHUB_REF_NAME" ] && [[ "$GITHUB_REF_NAME" == v* ]]; then
             TAG="$GITHUB_REF_NAME"
           else
-            TAG="v0.1.27"
+            TAG="v0.1.28"
           fi
 
           mkdir -p release_assets
@@ -66,6 +66,10 @@ jobs:
           ls -la release_assets/
 
           NOTES="### 修复与更新特性 (Bug Fixes & Features)
+          - **彻底去除桌面歌词外部边框与圆角阴影 (True Borderless & Frameless Desktop Lyrics)**:
+            - 彻底消除 Windows 11 DWM 系统默认添加的圆角外框与阴影边缘。
+            - 禁用 DWM 非客户区边框渲染（`DWMWA_WINDOW_CORNER_PREFERENCE = DWMWCP_DONOTROUND`、`DWMWA_BORDER_COLOR = DWMWA_COLOR_NONE`、`DWMWA_NCRENDERING_POLICY = DWMNCRP_DISABLED`）。
+            - 实现完全无多余边框、纯粹透明、如网易云音乐般丝滑融合桌面的悬浮歌词体验。
           - **桌面歌词全透明背景 (Full Transparent Desktop Lyrics Background)**:
             - 彻底去除悬停时的半透明深色底框，桌面歌词在任何时候均保持 100% 全透明呈现。
             - 强化高对比度字体描边与外发光阴影，在浅色、深色或复杂壁纸与多窗口背景下皆清晰易读。
@@ -86,7 +90,7 @@ jobs:
             - 双击已播放或加载中的曲目平滑保持播放，暂停状态平滑恢复播放，避免重复中断。
 
           ### 包含文件 (Files)
-          - \`mygo-music-setup-0.1.27-amd64.exe\`: Windows 官方风格安装程序 (NSIS Installer)
+          - \`mygo-music-setup-0.1.28-amd64.exe\`: Windows 官方风格安装程序 (NSIS Installer)
           - \`MyGo.Music.exe\`: Windows 64位独立便携版 (绿色免安装)"
 
           if gh release view "$TAG" > /dev/null 2>&1; then
