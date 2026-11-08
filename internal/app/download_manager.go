@@ -188,12 +188,15 @@ func (dm *downloadManager) Queue(tr music.Track, quality string) {
 	}
 
 	id := generateID()
+	dlDir := dm.a.downloadDir()
+	fileName := songFileName(&tr, "mp3")
 	item := &DownloadItem{
 		ID:        id,
 		Track:     tr,
 		Quality:   quality,
 		Status:    DownloadQueued,
 		CreatedAt: time.Now(),
+		Path:      filepath.Join(dlDir, fileName),
 	}
 	dm.items = append([]*DownloadItem{item}, dm.items...)
 	dm.saveLocked()

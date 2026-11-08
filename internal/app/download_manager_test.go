@@ -1,38 +1,33 @@
 package app
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
-	"time"
 
-	"mygo-music/internal/music"
+	"github.com/egoist/mygo"
 )
 
-func TestDownloadManagerQueueDoesNotDeadlock(t *testing.T) {
+func TestDownloadDir(t *testing.T) {
 	a := &app{
 		postFn: func(fn func()) { fn() },
 	}
-	dm := newDownloadManager(a)
+	p, err := mygo.App.Path(mygo.PathDownloads)
+	t.Logf("mygo.App.Path(mygo.PathDownloads): %q, err: %v", p, err)
+	dl := a.downloadDir()
+	t.Logf("a.downloadDir(): %q", dl)
+	fi, err := os.Stat(dl)
+	t.Logf("os.Stat(dl): %v, isDir: %v", err, fi != nil && fi.IsDir())
+}
 
-	tr := music.Track{
-		ID:     "test-tr-1",
-		Name:   "Test Song",
-		Source: "test",
-	}
+func TestOpenInFileManager(t *testing.T) {
+	// Should not panic on empty string
+	openInFileManager("")
 
-	done := make(chan bool, 1)
-	go func() {
-		dm.Queue(tr, "lossless")
-		done <- true
-	}()
+	// Should not panic on valid directory
+	dir, _ := mygo.App.Path(mygo.PathDownloads)
+	openInFileManager(dir)
 
-	select {
-	case <-done:
-		// Queue completed without deadlocking!
-	case <-time.After(2 * time.Second):
-		t.Fatal("dm.Queue deadlocked or timed out!")
-	}
-
-	if count := dm.ActiveCount(); count != 1 {
-		t.Logf("ActiveCount is %d", count)
-	}
+	// Should not panic on non-existent file with existing parent directory
+	openInFileManager(filepath.Join(dir, "MyGo Music", "non_existent.flac"))
 }

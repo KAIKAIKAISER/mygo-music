@@ -2,10 +2,7 @@ package app
 
 import (
 	"fmt"
-	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
 
@@ -14,25 +11,6 @@ import (
 
 	"mygo-music/internal/music"
 )
-
-func openInFileManager(path string) {
-	if path == "" {
-		return
-	}
-	switch runtime.GOOS {
-	case "windows":
-		cleanPath := filepath.Clean(path)
-		if fi, err := os.Stat(cleanPath); err == nil && !fi.IsDir() {
-			_ = exec.Command("explorer", "/select,"+cleanPath).Start()
-		} else {
-			_ = exec.Command("explorer", cleanPath).Start()
-		}
-	case "darwin":
-		_ = exec.Command("open", "-R", path).Start()
-	default:
-		_ = exec.Command("xdg-open", filepath.Dir(path)).Start()
-	}
-}
 
 func (a *app) chooseDownloadFolder() {
 	go func() {
