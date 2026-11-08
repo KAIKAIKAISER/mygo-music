@@ -102,9 +102,10 @@ func newDesktopLyrics(a *app) *desktopLyrics {
 		Title:         Tf("%s Desktop Lyrics", mygo.App.Name()),
 		Panel:         true,
 		Hidden:        true,
-		Frameless:     true,
-		Transparent:   true,
-		AlwaysOnTop:   true,
+		Frameless:       true,
+		Transparent:     true,
+		BackgroundColor: "transparent",
+		AlwaysOnTop:     true,
 		DisableShadow: true,
 		DisableResize: true,
 		SkipTaskbar:   true,
@@ -161,6 +162,7 @@ func (d *desktopLyrics) redraw() {
 }
 
 func (d *desktopLyrics) view(c *ui.Context) {
+	c.Root().Background(ui.Transparent)
 	a := d.a
 	pl := a.pl
 	tr := pl.Current()

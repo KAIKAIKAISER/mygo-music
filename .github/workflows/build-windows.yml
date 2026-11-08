@@ -55,7 +55,7 @@ jobs:
           if [ -n "$GITHUB_REF_NAME" ] && [[ "$GITHUB_REF_NAME" == v* ]]; then
             TAG="$GITHUB_REF_NAME"
           else
-            TAG="v0.1.26"
+            TAG="v0.1.27"
           fi
 
           mkdir -p release_assets
@@ -86,7 +86,7 @@ jobs:
             - 双击已播放或加载中的曲目平滑保持播放，暂停状态平滑恢复播放，避免重复中断。
 
           ### 包含文件 (Files)
-          - \`mygo-music-setup-0.1.26-amd64.exe\`: Windows 官方风格安装程序 (NSIS Installer)
+          - \`mygo-music-setup-0.1.27-amd64.exe\`: Windows 官方风格安装程序 (NSIS Installer)
           - \`MyGo.Music.exe\`: Windows 64位独立便携版 (绿色免安装)"
 
           if gh release view "$TAG" > /dev/null 2>&1; then
