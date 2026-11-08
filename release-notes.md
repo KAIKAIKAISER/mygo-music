@@ -1,0 +1,10 @@
+### 修复与优化 (Fixes & Improvements)
+- **彻底修复在文件夹中显示或打开目录时错误打开系统「文档」文件夹的问题 (Fix Explorer Opening 'Documents')**:
+  - **根因排查**：Windows 系统自带的 `explorer.exe` 在解析带有空格路径（如默认下载目录 `Downloads\MyGo Music`）时，若参数被整体外置双引号（如 `"/select,C:\...\MyGo Music\..."`），会导致 `explorer.exe` 无法识别 `/select,` 开关；若目标文件在排队中尚未落盘，资源管理器解析失败时也会自动降级打开系统的「文档」目录。
+  - **底层原生指令调用**：通过 `file_manager_windows.go` 针对 Windows 平台利用原生系统调用 `SysProcAttr{CmdLine: ...}` 准确拼接 `explorer.exe /select,"<Path>"`，消除参数外层引号截断。
+  - **智能逐级路径回退**：若音频文件正在下载中，自动向上回退精准打开所在文件夹（`Downloads\MyGo Music`），彻底杜绝错误重定向到「文档」。
+  - **任务路径初始预分配**：下载任务创建排队时立即初始化本地目标路径，任何时刻点击「在文件夹中显示」均能准确进入下载目录。
+
+### 包含文件 (Files)
+- `mygo-music-setup-0.1.33-amd64.exe`: Windows 官方风格安装程序 (NSIS Installer)
+- `MyGo.Music.exe`: Windows 64位独立便携版 (绿色免安装)
