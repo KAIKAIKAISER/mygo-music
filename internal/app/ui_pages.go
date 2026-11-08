@@ -472,6 +472,10 @@ func (a *app) filterTracks(tracks []music.Track) []music.Track {
 			res = append(res, tr)
 			continue
 		}
+		if strings.Contains(strings.ToLower(tr.ArtistNames()), q) {
+			res = append(res, tr)
+			continue
+		}
 		for _, art := range tr.Artists {
 			if strings.Contains(strings.ToLower(art.Name), q) {
 				res = append(res, tr)
@@ -483,6 +487,10 @@ func (a *app) filterTracks(tracks []music.Track) []music.Track {
 }
 
 func (a *app) playlistSearchField(c *ui.Context, p palette) {
+	a.playlistSearchFieldWithPlaceholder(c, p, T("Search in playlist"))
+}
+
+func (a *app) playlistSearchFieldWithPlaceholder(c *ui.Context, p palette, placeholder string) {
 	field := ui.Row(c).Height(30).Width(200).Radius(8).AlignItems(ui.Center)
 	if c.Focused(a.playlistFilterBox) {
 		field.Background(p.bg).Shadow(0, 0, 0, 3, p.accent.Alpha(0.25)).Border(1, p.accent)
@@ -491,7 +499,7 @@ func (a *app) playlistSearchField(c *ui.Context, p palette) {
 	}
 	field.Children(func() {
 		ui.TextInputBase(c.Key("pl-filter"), &a.playlistFilter).Bind(&a.playlistFilterBox).Grow(1).MinWidth(0).PaddingStart(29).PaddingEnd(9).
-			Placeholder(T("Search in playlist")).FontSize(12.5).Label(T("Search in playlist"))
+			Placeholder(placeholder).FontSize(12.5).Label(placeholder)
 		ui.Icon(c, iconSearch).Size(13, 13).TextColor(p.muted).Absolute().Left(9).Top(8.5).IgnoreInput(true)
 	})
 }

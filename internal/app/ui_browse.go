@@ -65,7 +65,81 @@ func (a *app) browsePage(c *ui.Context) {
 		a.trackSkeleton(c, a.pageShimmer(c), true, func(c *ui.Context) {})
 		return
 	}
-	a.browseRows(c, d.page, id, func(c *ui.Context) { a.browseHeader(c, d.page) })
+	page := d.page
+	if id == "songs" && len(page.Sections) > 0 {
+		allTracks := page.Sections[0].Tracks
+		filtered := a.filterTracks(allTracks)
+		sec := page.Sections[0]
+		sec.Tracks = filtered
+		if len(allTracks) > 0 && len(filtered) == 0 && a.playlistFilter != "" {
+			sec.Empty = T("No songs match the filter")
+		}
+		page = &music.Browse{
+			Title:       page.Title,
+			Subtitle:    i18n.Songs(len(filtered)),
+			Description: page.Description,
+			ImageURL:    page.ImageURL,
+			Sections:    []music.Section{sec},
+		}
+	} else if id == "albums" && len(page.Sections) > 0 {
+		allAlbums := page.Sections[0].Albums
+		q := strings.TrimSpace(strings.ToLower(a.playlistFilter))
+		var filtered []music.Album
+		if q == "" {
+			filtered = allAlbums
+		} else {
+			for _, al := range allAlbums {
+				if strings.Contains(strings.ToLower(al.Name), q) {
+					filtered = append(filtered, al)
+					continue
+				}
+				for _, art := range al.Artists {
+					if strings.Contains(strings.ToLower(art.Name), q) {
+						filtered = append(filtered, al)
+						break
+					}
+				}
+			}
+		}
+		sec := page.Sections[0]
+		sec.Albums = filtered
+		if len(allAlbums) > 0 && len(filtered) == 0 && a.playlistFilter != "" {
+			sec.Empty = T("No albums match the filter")
+		}
+		page = &music.Browse{
+			Title:       page.Title,
+			Subtitle:    page.Subtitle,
+			Description: page.Description,
+			ImageURL:    page.ImageURL,
+			Sections:    []music.Section{sec},
+		}
+	} else if id == "artists" && len(page.Sections) > 0 {
+		allArtists := page.Sections[0].Artists
+		q := strings.TrimSpace(strings.ToLower(a.playlistFilter))
+		var filtered []music.Artist
+		if q == "" {
+			filtered = allArtists
+		} else {
+			for _, art := range allArtists {
+				if strings.Contains(strings.ToLower(art.Name), q) {
+					filtered = append(filtered, art)
+				}
+			}
+		}
+		sec := page.Sections[0]
+		sec.Artists = filtered
+		if len(allArtists) > 0 && len(filtered) == 0 && a.playlistFilter != "" {
+			sec.Empty = T("No artists match the filter")
+		}
+		page = &music.Browse{
+			Title:       page.Title,
+			Subtitle:    page.Subtitle,
+			Description: page.Description,
+			ImageURL:    page.ImageURL,
+			Sections:    []music.Section{sec},
+		}
+	}
+	a.browseRows(c, page, id, func(c *ui.Context) { a.browseHeader(c, page) })
 }
 
 // browseHeader heads a page the source made up: its title, and what it says
@@ -89,6 +163,33 @@ func (a *app) browseHeader(c *ui.Context, page *music.Browse) {
 	}
 	if page.ImageURL == "" {
 		if len(lines) == 0 {
+			if a.route.id == "songs" || a.route.id == "albums" || a.route.id == "artists" {
+				ui.Column(c).Margin(0, 0, 18, 0).Children(func() {
+					if page.Subtitle != "" {
+						ui.Text(c, page.Subtitle).FontSize(12).FontWeight(600).TextColor(p.muted).LetterSpacing(0.4)
+					}
+					ui.Row(c).AlignItems(ui.Center).Children(func() {
+						ui.Text(c, page.Title).FontSize(30).FontWeight(700).LetterSpacing(-0.6).Grow(1)
+						if a.route.id != "songs" {
+							placeholder := T("Search in list")
+							if a.route.id == "albums" {
+								placeholder = T("Search albums")
+							} else if a.route.id == "artists" {
+								placeholder = T("Search artists")
+							}
+							a.playlistSearchFieldWithPlaceholder(c, p, placeholder)
+						}
+					})
+					if a.route.id == "songs" && len(page.Sections) > 0 {
+						ui.Row(c).Gap(10).Margin(10, 0, 0, 0).AlignItems(ui.Center).Children(func() {
+							a.playButtons(c, page.Sections[0].Tracks)
+							ui.Box(c).Grow(1)
+							a.playlistSearchFieldWithPlaceholder(c, p, T("Search by song or artist"))
+						})
+					}
+				})
+				return
+			}
 			if page.Title != "" {
 				a.heading(c, page.Title, page.Subtitle)
 			}

@@ -79,6 +79,9 @@ type desktopLyrics struct {
 	screenX float32
 	screenY float32
 	locked  bool
+
+	mouseInside bool
+	overUnlock  bool
 }
 
 func newDesktopLyrics(a *app) *desktopLyrics {
@@ -143,6 +146,8 @@ func (d *desktopLyrics) hide() {
 
 func (d *desktopLyrics) applyLock(locked bool) {
 	d.locked = locked
+	d.mouseInside = false
+	d.overUnlock = false
 	if d.win != nil {
 		d.win.SetIgnoreMouseEvents(locked)
 		d.win.Invalidate()
@@ -188,25 +193,66 @@ func (d *desktopLyrics) view(c *ui.Context) {
 	activeColor := getLyricsColor(a.settings.DesktopLyricsColor)
 	secondaryColor := ui.RGBA(255, 255, 255, 0.78)
 
-	wrap := ui.Box(c.Key("desktop-wrap")).Fill().Padding(6, 16)
+	if locked {
+		c.After(50 * time.Millisecond)
+		if d.win != nil && d.win.IsVisible() {
+			pt := mygo.Screen.CursorScreenPoint()
+			b := d.win.Bounds()
+			inside := pt.X >= b.X && pt.X < b.X+b.Width && pt.Y >= b.Y && pt.Y < b.Y+b.Height
+
+			btnW, btnH := 180, 36
+			btnX := b.X + (b.Width-btnW)/2
+			btnY := b.Y + 2
+			overBtn := inside && pt.X >= btnX && pt.X <= btnX+btnW && pt.Y >= btnY && pt.Y <= btnY+btnH
+
+			if inside != d.mouseInside || overBtn != d.overUnlock {
+				d.mouseInside = inside
+				d.overUnlock = overBtn
+				d.win.SetIgnoreMouseEvents(!overBtn)
+				d.win.Invalidate()
+			}
+		}
+	} else {
+		d.mouseInside = false
+		d.overUnlock = false
+	}
+
+	wrap := ui.Box(c.Key("desktop-wrap")).Fill().Padding(4, 16).Background(ui.Transparent)
 	if !locked {
 		wrap.DragWindow()
 	}
 
-	hovered := wrap.Hovered() && !locked
-	if hovered {
-		wrap.Background(ui.RGBA(18, 18, 22, 0.65)).Radius(16).
-			Border(1, ui.RGBA(255, 255, 255, 0.15)).
-			Shadow(0, 10, 32, -4, ui.RGBA(0, 0, 0, 0.45))
-	}
-
 	wrap.Children(func() {
 		ui.Column(c).Fill().Justify(ui.SpaceBetween).Children(func() {
-			// Top row: hover toolbar (only when hovered and not locked)
-			if hovered {
-				d.toolbar(c, activeColor)
+			// Top row: hover toolbar when unlocked, or unlock button when locked and mouse is over lyrics
+			if !locked {
+				if wrap.Hovered() {
+					d.toolbar(c, activeColor)
+				} else {
+					ui.Box(c).Height(28)
+				}
 			} else {
-				ui.Box(c).Height(6)
+				if d.mouseInside {
+					ui.Row(c.Key("unlock-wrap")).Height(28).Justify(ui.Center).Children(func() {
+						btn := ui.ButtonBase(c.Key("unlock-btn")).Height(28).PaddingX(14).Gap(6).Radius(14).
+							Background(ui.RGBA(25, 25, 30, 0.94)).
+							Border(0.8, ui.RGBA(255, 255, 255, 0.3)).
+							Shadow(0, 4, 12, -2, ui.RGBA(0, 0, 0, 0.45)).
+							AlignItems(ui.Center).FocusRing(false).Label(T("Unlock Desktop Lyrics"))
+						if d.overUnlock || btn.Hovered() {
+							btn.Background(ui.RGBA(40, 40, 50, 0.98)).Border(0.8, activeColor)
+						}
+						if btn.Clicked() {
+							a.setDesktopLyricsLocked(false)
+						}
+						btn.Children(func() {
+							ui.Icon(c, iconUnlock).Size(14, 14).TextColor(activeColor)
+							ui.Text(c, T("Unlock Lyrics")).FontSize(12).FontWeight(600).TextColor(ui.Hex("#ffffff"))
+						})
+					})
+				} else {
+					ui.Box(c).Height(28)
+				}
 			}
 
 			// Lyrics rows container
