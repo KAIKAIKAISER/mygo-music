@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/egoist/mygo"
@@ -75,13 +76,19 @@ type desktopLyrics struct {
 	a   *app
 	win *mygo.Window
 
-	w, h    float32
-	screenX float32
-	screenY float32
-	locked  bool
-
+	w, h        float32
+	centerX     float32
+	screenY     float32
+	locked      bool
 	mouseInside bool
 	overUnlock  bool
+
+	lastLine1      string
+	lastLine2      string
+	lastFontSize   float32
+	lastFontFamily string
+	targetW        float32
+	targetH        float32
 }
 
 func newDesktopLyrics(a *app) *desktopLyrics {
@@ -92,16 +99,17 @@ func newDesktopLyrics(a *app) *desktopLyrics {
 	if area.Width == 0 || area.Height == 0 {
 		area = disp.Bounds
 	}
-	defaultW := 1024
-	if area.Width > 0 && area.Width-40 < defaultW {
-		defaultW = max(600, area.Width-40)
-	}
+	defaultW := 520
+	defaultH := 130
 	d.w = float32(defaultW)
-	d.h = 140
+	d.h = float32(defaultH)
 
 	if area.Width > 0 && area.Height > 0 {
-		d.screenX = float32(area.X + (area.Width-int(d.w))/2)
-		d.screenY = float32(area.Y + area.Height - int(d.h) - 70)
+		d.centerX = float32(area.X + area.Width/2)
+		d.screenY = float32(area.Y + area.Height - defaultH - 70)
+	} else {
+		d.centerX = 600
+		d.screenY = 700
 	}
 
 	d.win = mygo.NewWindow(mygo.WindowOptions{
@@ -115,27 +123,33 @@ func newDesktopLyrics(a *app) *desktopLyrics {
 		DisableResize:   true,
 		SkipTaskbar:     true,
 		StateKey:        "desktop-lyrics",
-		X:               int(d.screenX),
+		X:               int(d.centerX - d.w/2),
 		Y:               int(d.screenY),
 		Width:           int(d.w),
 		Height:          int(d.h),
 		Content:         ui.View(d.view),
 	})
 
+	initB := d.win.Bounds()
+	if initB.Width > 0 && initB.Height > 0 {
+		d.centerX = float32(initB.X) + float32(initB.Width)/2
+		d.screenY = float32(initB.Y)
+		d.w = float32(initB.Width)
+		d.h = float32(initB.Height)
+	}
+
 	removeWindowBorder(d.win.NativeHandle())
-	d.adjustWithinScreen()
 
 	d.win.OnShow(func() {
 		removeWindowBorder(d.win.NativeHandle())
-		d.adjustWithinScreen()
 	})
 
 	d.win.OnMove(func() {
-		d.adjustWithinScreen()
-	})
-
-	d.win.OnResize(func() {
-		d.adjustWithinScreen()
+		b := d.win.Bounds()
+		if b.Width > 0 {
+			d.centerX = float32(b.X) + float32(b.Width)/2
+			d.screenY = float32(b.Y)
+		}
 	})
 
 	d.win.OnClose(func(e *mygo.CloseEvent) {
@@ -147,7 +161,6 @@ func newDesktopLyrics(a *app) *desktopLyrics {
 
 	if a.settings.DesktopLyrics {
 		removeWindowBorder(d.win.NativeHandle())
-		d.adjustWithinScreen()
 		d.win.ShowInactive()
 		d.applyLock(a.settings.DesktopLyricsLocked)
 	}
@@ -158,7 +171,6 @@ func newDesktopLyrics(a *app) *desktopLyrics {
 func (d *desktopLyrics) show() {
 	if d.win != nil {
 		removeWindowBorder(d.win.NativeHandle())
-		d.adjustWithinScreen()
 		d.win.ShowInactive()
 		d.applyLock(d.a.settings.DesktopLyricsLocked)
 	}
@@ -167,54 +179,6 @@ func (d *desktopLyrics) show() {
 func (d *desktopLyrics) hide() {
 	if d.win != nil {
 		d.win.Hide()
-	}
-}
-
-func (d *desktopLyrics) adjustWithinScreen() {
-	if d.win == nil || !d.win.IsVisible() {
-		return
-	}
-	b := d.win.Bounds()
-	disp := mygo.Screen.DisplayMatching(b)
-	area := disp.WorkArea
-	if area.Width == 0 || area.Height == 0 {
-		area = disp.Bounds
-	}
-	if area.Width == 0 || area.Height == 0 {
-		return
-	}
-
-	const margin = 10
-	changed := false
-
-	if b.Width > area.Width-margin*2 {
-		b.Width = area.Width - margin*2
-		changed = true
-	}
-	if b.Height > area.Height-margin*2 {
-		b.Height = area.Height - margin*2
-		changed = true
-	}
-
-	if b.X+b.Width > area.X+area.Width-margin {
-		b.X = area.X + area.Width - margin - b.Width
-		changed = true
-	}
-	if b.X < area.X+margin {
-		b.X = area.X + margin
-		changed = true
-	}
-	if b.Y+b.Height > area.Y+area.Height-margin {
-		b.Y = area.Y + area.Height - margin - b.Height
-		changed = true
-	}
-	if b.Y < area.Y+margin {
-		b.Y = area.Y + margin
-		changed = true
-	}
-
-	if changed {
-		d.win.SetBounds(b)
 	}
 }
 
@@ -246,9 +210,6 @@ func (d *desktopLyrics) view(c *ui.Context) {
 		cur = lyrics.Index(lines, pos)
 	}
 
-	// Ensure window stays within screen bounds at all times
-	d.adjustWithinScreen()
-
 	// Line 1: Current singing line
 	line1Text := ""
 	var currentWords []lyrics.Word
@@ -273,7 +234,7 @@ func (d *desktopLyrics) view(c *ui.Context) {
 		line2Text = tr.ArtistNames()
 	}
 
-	// Schedule redraw while playing; if paused, periodically check screen edges and hover
+	// Schedule redraw while playing; if paused, periodically check hover
 	if pl.Playing() {
 		if cur >= 0 && cur < len(lines) && len(lines[cur].Words) > 0 {
 			// Syllable / karaoke precision (25 fps).
@@ -299,65 +260,142 @@ func (d *desktopLyrics) view(c *ui.Context) {
 
 	// Window bounds and display work area
 	b := d.win.Bounds()
-	curWinW := float32(b.Width)
-	if curWinW <= 0 {
-		curWinW = d.w
-	}
 	disp := mygo.Screen.DisplayMatching(b)
 	area := disp.WorkArea
 	if area.Width == 0 || area.Height == 0 {
 		area = disp.Bounds
 	}
-	maxWinW := float32(area.Width - 20)
-	if maxWinW < 600 {
-		maxWinW = 600
+	if area.Width == 0 || area.Height == 0 {
+		area = mygo.Rectangle{X: 0, Y: 0, Width: 1920, Height: 1080}
 	}
 
-	// Measure required text width at base font size
-	w1 := measureText(c, line1Text, fontFamily, fontSize, 800)
-	baseSize2 := max(16, fontSize*0.72)
-	w2 := float32(0)
+	maxScreenW := float32(area.Width - 32)
+	if maxScreenW < 380 {
+		maxScreenW = 380
+	}
+
+	// 1. Measure natural single-line width of both lines
+	baseSize2 := max(15, fontSize*0.72)
+	w1, h1Natural := measureTextSize(c, line1Text, fontFamily, fontSize, 800, 0)
+	w2, h2Natural := float32(0), float32(0)
 	if line2Text != "" {
-		w2 = measureText(c, line2Text, fontFamily, baseSize2, 600)
+		w2, h2Natural = measureTextSize(c, line2Text, fontFamily, baseSize2, 600, 0)
 	}
 
-	// Dynamic width expansion: expand window width if lyrics need more room
-	neededW := max(w1, w2) + 64
-	if neededW > curWinW && curWinW < maxWinW {
-		targetW := min(maxWinW, neededW)
-		if targetW > curWinW+16 {
-			d.w = targetW
-			b.Width = int(targetW)
-			if b.X+b.Width > area.X+area.Width-10 {
-				b.X = area.X + area.Width - 10 - b.Width
-			}
-			if b.X < area.X+10 {
-				b.X = area.X + 10
-			}
-			d.win.SetBounds(b)
-			b = d.win.Bounds()
-			curWinW = float32(b.Width)
+	// Content width needed
+	contentW := max(w1, w2)
+	minWinW := float32(380)
+	neededW := max(minWinW, contentW+48)
+
+	// Dynamic target width
+	targetW := neededW
+	if targetW > maxScreenW {
+		targetW = maxScreenW
+	}
+
+	// Usable width for text inside window
+	usableW := targetW - 48
+	if usableW < 320 {
+		usableW = 320
+	}
+
+	// 2. Adaptive font size and wrapping check
+	line1FontSize := fontSize
+	line2FontSize := baseSize2
+
+	line1WrappedH := h1Natural
+	if w1 > usableW && w1 > 0 {
+		if w1 <= usableW*1.22 {
+			// Fits with mild downscaling (up to 18% downscale)
+			scale := usableW / w1
+			line1FontSize = max(18.0, fontSize*scale)
+		} else {
+			// Wrap to multiple lines; downscale slightly for comfortable reading
+			line1FontSize = max(20.0, fontSize*0.88)
+			_, line1WrappedH = measureTextSize(c, line1Text, fontFamily, line1FontSize, 800, usableW)
 		}
 	}
 
-	// Usable width for text inside wrap (with margin padding)
-	usableW := curWinW - 48
-	if usableW < 400 {
-		usableW = 400
-	}
-
-	// Adaptive font size scaling for Line 1: downscale smoothly if it exceeds usable width
-	line1FontSize := fontSize
-	if w1 > usableW && w1 > 0 {
-		scale1 := usableW / w1
-		line1FontSize = max(18.0, fontSize*scale1)
-	}
-
-	// Adaptive font size scaling for Line 2
-	line2FontSize := baseSize2
+	line2WrappedH := h2Natural
 	if w2 > usableW && w2 > 0 {
-		scale2 := usableW / w2
-		line2FontSize = max(13.0, baseSize2*scale2)
+		if w2 <= usableW*1.22 {
+			scale := usableW / w2
+			line2FontSize = max(13.0, baseSize2*scale)
+		} else {
+			line2FontSize = max(14.0, baseSize2*0.9)
+			_, line2WrappedH = measureTextSize(c, line2Text, fontFamily, line2FontSize, 600, usableW)
+		}
+	}
+
+	// 3. Dynamic target height
+	// Toolbar/unlock row: 28px; top/bottom padding: 16px; gap: 6px
+	totalNeededH := 28 + line1WrappedH + 16
+	if line2Text != "" {
+		totalNeededH += line2WrappedH + 6
+	}
+	targetH := max(130.0, totalNeededH+8)
+	if targetH > float32(area.Height-20) {
+		targetH = float32(area.Height - 20)
+	}
+
+	// 4. Calculate adaptive position based on preferred center
+	if d.centerX <= 0 {
+		if b.Width > 0 {
+			d.centerX = float32(b.X) + float32(b.Width)/2
+		} else {
+			d.centerX = float32(area.X + area.Width/2)
+		}
+	}
+	if d.screenY <= 0 {
+		if b.Height > 0 {
+			d.screenY = float32(b.Y)
+		} else {
+			d.screenY = float32(area.Y + area.Height - int(targetH) - 70)
+		}
+	}
+
+	newX := int(d.centerX - targetW/2)
+	newY := int(d.screenY)
+
+	// Keep smoothly within screen boundaries
+	if newX+int(targetW) > area.X+area.Width-10 {
+		newX = area.X + area.Width - 10 - int(targetW)
+	}
+	if newX < area.X+10 {
+		newX = area.X + 10
+	}
+	if newY+int(targetH) > area.Y+area.Height-10 {
+		newY = area.Y + area.Height - 10 - int(targetH)
+	}
+	if newY < area.Y+10 {
+		newY = area.Y + 10
+	}
+
+	// 5. Update bounds only when content changes or geometry significantly shifts
+	contentChanged := line1Text != d.lastLine1 || line2Text != d.lastLine2 || fontSize != d.lastFontSize || fontFamily != d.lastFontFamily
+	sizeShift := math.Abs(float64(float32(b.Width)-targetW)) >= 8 || math.Abs(float64(float32(b.Height)-targetH)) >= 8
+	posShift := math.Abs(float64(b.X-newX)) >= 8 || math.Abs(float64(b.Y-newY)) >= 8
+
+	if contentChanged || sizeShift || posShift {
+		d.lastLine1 = line1Text
+		d.lastLine2 = line2Text
+		d.lastFontSize = fontSize
+		d.lastFontFamily = fontFamily
+		d.targetW = targetW
+		d.targetH = targetH
+		d.w = targetW
+		d.h = targetH
+
+		newBounds := mygo.Rectangle{
+			X:      newX,
+			Y:      newY,
+			Width:  int(targetW),
+			Height: int(targetH),
+		}
+		if newBounds != b {
+			d.win.SetBounds(newBounds)
+			b = d.win.Bounds()
+		}
 	}
 
 	if locked {
@@ -421,50 +459,47 @@ func (d *desktopLyrics) view(c *ui.Context) {
 				}
 			}
 
-			// Lyrics rows container
-			ui.Column(c).Grow(1).Justify(ui.Center).Gap(4).Children(func() {
-				ui.Row(c.Key("line1-row")).Justify(ui.Center).AlignItems(ui.Center).Children(func() {
-					if len(currentWords) > 0 && cur >= 0 && cur < len(lines) {
-						// Karaoke word-by-word lighting up!
-						rt := ui.RichText(c.Key("rt1")).FontSize(line1FontSize).FontWeight(800).
-							LineHeight(1.15).LetterSpacing(-0.2).
-							TextStroke(2.2, ui.RGBA(0, 0, 0, 0.8)).
-							TextShadow(0, 2, 8, ui.RGBA(0, 0, 0, 0.95))
-						if fontFamily != "" {
-							rt.Font(fontFamily)
-						}
-						rt.Children(func() {
-							for wi, wd := range currentWords {
-								lit := clamp01(float32((pos - wd.Start).Seconds() / max(0.05, (wd.End-wd.Start).Seconds())))
-								col := activeColor.Alpha(0.45 + 0.55*lit)
-								ui.Text(c.Key(wi), wd.Text).TextColor(col)
-							}
-						})
-					} else {
-						el := ui.Text(c.Key("txt1"), line1Text).FontSize(line1FontSize).FontWeight(800).
-							LineHeight(1.15).LetterSpacing(-0.2).
-							TextColor(activeColor).
-							TextStroke(2.2, ui.RGBA(0, 0, 0, 0.8)).
-							TextShadow(0, 2, 8, ui.RGBA(0, 0, 0, 0.95)).
-							SingleLine()
-						if fontFamily != "" {
-							el.Font(fontFamily)
-						}
+			// Lyrics container (auto-centered, wrapping text at usableW)
+			ui.Column(c.Key("lyrics-container")).Grow(1).Justify(ui.Center).AlignItems(ui.Center).Gap(6).Children(func() {
+				if len(currentWords) > 0 && cur >= 0 && cur < len(lines) {
+					// Karaoke word-by-word lighting up!
+					rt := ui.RichText(c.Key("rt1")).Width(usableW).TextAlign(ui.Center).
+						FontSize(line1FontSize).FontWeight(800).
+						LineHeight(1.2).LetterSpacing(-0.2).
+						TextStroke(2.2, ui.RGBA(0, 0, 0, 0.8)).
+						TextShadow(0, 2, 8, ui.RGBA(0, 0, 0, 0.95))
+					if fontFamily != "" {
+						rt.Font(fontFamily)
 					}
-				})
-
-				if line2Text != "" {
-					ui.Row(c.Key("line2-row")).Justify(ui.Center).AlignItems(ui.Center).Children(func() {
-						el := ui.Text(c.Key("txt2"), line2Text).FontSize(line2FontSize).FontWeight(600).
-							LineHeight(1.2).LetterSpacing(-0.1).
-							TextColor(secondaryColor).
-							TextStroke(1.6, ui.RGBA(0, 0, 0, 0.75)).
-							TextShadow(0, 2, 6, ui.RGBA(0, 0, 0, 0.85)).
-							SingleLine()
-						if fontFamily != "" {
-							el.Font(fontFamily)
+					rt.Children(func() {
+						for wi, wd := range currentWords {
+							lit := clamp01(float32((pos - wd.Start).Seconds() / max(0.05, (wd.End-wd.Start).Seconds())))
+							col := activeColor.Alpha(0.45 + 0.55*lit)
+							ui.Text(c.Key(wi), wd.Text).TextColor(col)
 						}
 					})
+				} else {
+					el := ui.Text(c.Key("txt1"), line1Text).Width(usableW).TextAlign(ui.Center).
+						FontSize(line1FontSize).FontWeight(800).
+						LineHeight(1.2).LetterSpacing(-0.2).
+						TextColor(activeColor).
+						TextStroke(2.2, ui.RGBA(0, 0, 0, 0.8)).
+						TextShadow(0, 2, 8, ui.RGBA(0, 0, 0, 0.95))
+					if fontFamily != "" {
+						el.Font(fontFamily)
+					}
+				}
+
+				if line2Text != "" {
+					el := ui.Text(c.Key("txt2"), line2Text).Width(usableW).TextAlign(ui.Center).
+						FontSize(line2FontSize).FontWeight(600).
+						LineHeight(1.2).LetterSpacing(-0.1).
+						TextColor(secondaryColor).
+						TextStroke(1.6, ui.RGBA(0, 0, 0, 0.75)).
+						TextShadow(0, 2, 6, ui.RGBA(0, 0, 0, 0.85))
+					if fontFamily != "" {
+						el.Font(fontFamily)
+					}
 				}
 			})
 
@@ -474,20 +509,23 @@ func (d *desktopLyrics) view(c *ui.Context) {
 	})
 }
 
-func measureText(c *ui.Context, text, font string, size float32, weight int) float32 {
+func measureTextSize(c *ui.Context, text, font string, size float32, weight int, wrapWidth float32) (float32, float32) {
 	if text == "" || size <= 0 {
-		return 0
+		return 0, 0
 	}
-	w, _ := c.MeasureText(0, ui.Span{
+	w, h := c.MeasureText(wrapWidth, ui.Span{
 		Text:   text,
 		Font:   font,
 		Size:   size,
 		Weight: weight,
 	})
 	if w <= 0 {
-		return estimateTextWidth(text, size)
+		w = estimateTextWidth(text, size)
 	}
-	return w
+	if h <= 0 {
+		h = size * 1.25
+	}
+	return w, h
 }
 
 func estimateTextWidth(text string, fontSize float32) float32 {
