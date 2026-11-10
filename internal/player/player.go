@@ -204,12 +204,21 @@ func (p *Player) PlayTrack(tracks []music.Track, i int) {
 	p.playQueue(tracks, i, stay)
 }
 
+// PlayShuffled replaces the queue with tracks in a random order, any of them
+// first, and plays it with shuffle on.
+func (p *Player) PlayShuffled(tracks []music.Track) {
+	p.shuffle = true
+	p.playQueue(tracks, -1, forward)
+}
+
+// playQueue plays tracks from start; a start below 0, when shuffled, lets
+// any track come first.
 func (p *Player) playQueue(tracks []music.Track, start, dir int) {
 	if len(tracks) == 0 {
 		return
 	}
 	p.endRadio()
-	start = min(max(start, 0), len(tracks)-1)
+	start = min(start, len(tracks)-1)
 	p.queue = append([]music.Track(nil), tracks...)
 	p.order = make([]int, len(p.queue))
 	for i := range p.order {
@@ -219,7 +228,7 @@ func (p *Player) playQueue(tracks []music.Track, start, dir int) {
 		p.shuffleOrder(start)
 		start = 0
 	}
-	p.loadSkipping(start, 0, dir, true, 0)
+	p.loadSkipping(max(start, 0), 0, dir, true, 0)
 }
 
 // PlayRadio plays tracks in their order, then goes on with those feed
@@ -909,6 +918,9 @@ func errorText(err error) string {
 	case errors.Is(err, music.ErrSignIn):
 		return i18n.T("Sign in to play this song")
 	case errors.Is(err, music.ErrSetup):
+		if reason := music.Reason(err); reason != "" {
+			return reason
+		}
 		return i18n.T("The plugin needs setting up")
 	}
 	return err.Error()

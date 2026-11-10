@@ -208,6 +208,7 @@ var zhCN = map[string]string{
 	"Experiments":                  "实验性功能",
 	"File":                         "文件",
 	"Fill these in for it to work": "填写这些内容后才能使用",
+	"Fill in %s for it to work":  "填写%s后才能使用",
 	"Flow":                         "流光",
 	"Fog Backdrop":                 "烟雾背景",
 	"Follow":                       "关注",

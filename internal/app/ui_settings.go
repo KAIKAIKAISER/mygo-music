@@ -691,7 +691,7 @@ func (a *app) pluginSettings(c *ui.Context, lib *library, p palette) {
 					})
 				}
 				if enabled && lib.needsSetup {
-					ui.Text(c, T("Fill these in for it to work")).FontSize(12).TextColor(p.accent).LineHeight(1.4)
+					ui.Text(c, setupNotice(lib, info)).FontSize(12).TextColor(p.accent).LineHeight(1.4)
 				}
 				a.pluginUpdateError(c, lib, p)
 			})
@@ -724,6 +724,26 @@ func (a *app) pluginSettings(c *ui.Context, lib *library, p palette) {
 			a.sourceSetting(c.Key(st.Key), lib, st, p)
 		}
 	})
+}
+
+// setupNotice says what a plugin that needs setting up wants: what it said, or
+// else the settings still empty, or else only that it does. A plugin may need
+// something no field holds, such as a program installed or allowed, so the
+// fields alone aren't the answer.
+func setupNotice(lib *library, info music.Info) string {
+	if lib.setupReason != "" {
+		return lib.setupReason
+	}
+	var empty []string
+	for _, st := range info.Settings {
+		if strings.TrimSpace(lib.src.Setting(st.Key)) == "" {
+			empty = append(empty, st.Label)
+		}
+	}
+	if len(empty) > 0 {
+		return Tf("Fill in %s for it to work", strings.Join(empty, ", "))
+	}
+	return Tf("%s needs setting up first", lib.name())
 }
 
 // pluginEnabled reports whether a plugin is on.
@@ -792,6 +812,8 @@ func (a *app) grantPrograms(lib *library, g guarded, on bool) {
 				a.actionFailed(lib, err, T("Couldn't change that"))
 				return
 			}
+			// Starting programs may be what it needed setting up for.
+			lib.needsSetup, lib.askedSetup, lib.setupReason = false, false, ""
 			a.libraryChanged(lib)
 		})
 	}()
@@ -835,7 +857,7 @@ func (a *app) keepSetting(lib *library, key, value string) {
 				a.toast = Tf("Couldn't keep the setting: %s", err.Error())
 				return
 			}
-			lib.needsSetup, lib.askedSetup = false, false
+			lib.needsSetup, lib.askedSetup, lib.setupReason = false, false, ""
 			a.libraryChanged(lib)
 			a.loadAccount(lib)
 		})

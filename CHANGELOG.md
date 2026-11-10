@@ -2,6 +2,20 @@
 
 All notable changes to MyGo Music are written down here. Versions follow [Semantic Versioning](https://semver.org).
 
+## [0.1.22] - 2026-11-07
+
+### Fixed
+
+- The Shuffle button in a list now lets any song come first, instead of always keeping the first one first. A song you pick to start still stays first.
+- Seeking in AAC audio in an MP4, including a fragmented file as streaming sites serve it, lands on the same frame as playing straight through, not a second or so off after the first short packet.
+- The end of a fragmented MP4 no longer plays the silence padding of its last packet.
+- Now Playing's lyrics start at the top in a tall window, instead of leaving the top of the window empty and cutting off the lines before the one sung.
+- Japanese lyrics are drawn in a Japanese font, kanji and kana alike, rather than their kanji in the font of the app's language.
+- On English Windows, Chinese text is drawn in one Chinese font, not with characters in different fonts.
+- A plugin that needs setting up says why, in its settings and in the player, instead of "Fill these in for it to work" whatever it said. The message goes away once the program is allowed or the setting is saved.
+- A plugin's `id` and `main` must now stay inside the plugin's folder, so a plugin dropped into the plugins folder can't read another plugin's saved settings or run code from outside its folder.
+- The notch's Shuffle and Repeat buttons take the accent colour.
+
 ## [0.1.21] - 2026-11-07
 
 ### Added
@@ -205,6 +219,7 @@ All notable changes to MyGo Music are written down here. Versions follow [Semant
 
 The first release: a native music player that plays your local files and gets everything else from plugins.
 
+[0.1.22]: https://github.com/egoist/mygo-music/compare/v0.1.21...v0.1.22
 [0.1.21]: https://github.com/egoist/mygo-music/compare/v0.1.20...v0.1.21
 [0.1.20]: https://github.com/egoist/mygo-music/compare/v0.1.19...v0.1.20
 [0.1.19]: https://github.com/egoist/mygo-music/compare/v0.1.18...v0.1.19
