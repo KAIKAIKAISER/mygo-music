@@ -97,8 +97,11 @@ type app struct {
 	deleting    deleteDialog       // whether to delete a playlist, asked
 	toast       string             // a message to show once
 	dailySpin   spinState          // the record on the feature card
-	dailyBars   barState           // the bars on its play button
-	settingText map[string]*string // the settings of sources, as being typed
+	dailyBars      barState                     // the bars on its play button
+	settingText    map[string]*string           // the settings of sources, as being typed
+	settingEdits   map[string]*settingEdit      // pending typed-setting saves, main thread only
+	settingSaves   map[*library]<-chan struct{} // source save order, main thread only
+	settingPending map[string]*settingWrite     // last queued value per source/key
 
 	trackList ui.ListState
 	// Where the page and the sidebar are scrolled, kept while Now Playing
@@ -131,7 +134,6 @@ type app struct {
 	npStill     bool    // whether it comes and goes in place, sliding or fading, rather than out of the bar's cover
 	npFrom      ui.Rect // the player bar's cover, which it grows out of
 	npPane      int     // paneLyrics, paneQueue, paneStage, paneComments or paneShow
-	npPaneTop   float32 // how far the cover beside the pane starts below its top
 	lyricScroll ui.ScrollState
 	lyricGlide  lyricGlide
 	lyricAt     int

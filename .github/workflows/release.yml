@@ -67,13 +67,16 @@ jobs:
     if: github.repository == 'egoist/mygo-music'
     needs: draft-release
     name: ${{ matrix.name }}
+    defaults:
+      run:
+        shell: bash
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - { name: macOS, os: macos-latest, platform: "darwin/arm64,darwin/amd64" }
-          - { name: Windows, os: ubuntu-latest, platform: "windows/amd64,windows/arm64" }
+          - { name: Windows, os: windows-latest, platform: "windows/amd64,windows/arm64" }
           - { name: Linux, os: ubuntu-latest, platform: "linux/amd64,linux/arm64" }
     steps:
       - uses: actions/checkout@v7
@@ -102,9 +105,7 @@ jobs:
             ${{ steps.go-env.outputs.mod }}
           key: go-${{ matrix.name }}-${{ hashFiles('go.mod', 'go.sum') }}
           restore-keys: go-${{ matrix.name }}-
-      - name: Install NSIS, for the Windows installers
-        if: matrix.name == 'Windows'
-        run: sudo apt-get update && sudo apt-get install -y nsis
+      # On Windows, mygo downloads NSIS when it is not installed.
       # The certificate signs the app; the notary profile, "notary" in
       # mygo.config.ts, notarizes its disk image. Both go in a keychain of the
       # job, made the default one, where codesign and notarytool look.

@@ -2,6 +2,28 @@
 
 All notable changes to MyGo Music are written down here. Versions follow [Semantic Versioning](https://semver.org).
 
+## [0.1.24] - 2026-11-11
+
+### Changed
+
+- Updated MyGo to v0.9.0.
+
+### Fixed
+
+- Windows releases now build on a native Windows runner.
+
+## [0.1.23] - 2026-11-11
+
+### Added
+
+- Plugins can ask for password fields, switches and select menus in their settings. Passwords are masked and saved explicitly; switches and selects save when changed. Existing plugins keep their text fields and string values.
+
+### Fixed
+
+- Scrolling over the volume control changes the volume by a consistent step per mouse-wheel event.
+- Now Playing's cover stays clear of the tabs while a radio plays.
+- Liked and Saved Albums use the titles the source gives them in its sidebar.
+
 ## [0.1.22] - 2026-11-07
 
 ### Fixed
