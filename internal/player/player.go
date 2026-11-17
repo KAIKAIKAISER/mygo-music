@@ -5,6 +5,7 @@ import (
 	"math"
 	"math/rand/v2"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/egoist/mygo"
@@ -812,7 +813,8 @@ func (p *Player) loadSkipping(at, skipped, dir int, play bool, from time.Duratio
 // loadCover shows the system the cover of t, once it has it.
 func (p *Player) loadCover(gen int, t *music.Track) {
 	url := t.Album.ImageURL
-	if url == "" && t.Source == "local" {
+	isYT := strings.Contains(strings.ToLower(t.Source), "youtube") || strings.Contains(strings.ToLower(t.Source), "ytmusic")
+	if url == "" && (t.Source == "local" || isYT) {
 		go func() {
 			match := netease.Match(t.ArtistNames(), t.Name)
 			if match != nil && match.CoverURL != "" {
@@ -854,12 +856,10 @@ func (p *Player) loadCover(gen int, t *music.Track) {
 func (p *Player) loadLyrics(gen int, src music.Source, t music.Track) {
 	go func() {
 		var lines []lyrics.Line
-		if src != nil && src.Can("lyrics") {
-			if l, err := src.Lyrics(t.ID); err == nil && l != nil {
-				lines = lyrics.FromSource(l)
-			}
-		}
-		if len(lines) == 0 && t.Source == "local" {
+		isYT := strings.Contains(strings.ToLower(t.Source), "youtube") || strings.Contains(strings.ToLower(t.Source), "ytmusic")
+
+		// For YouTube Music, prioritize NetEase Cloud Music's timed & translated lyrics
+		if isYT {
 			match := netease.Match(t.ArtistNames(), t.Name)
 			if match != nil && match.LyricsLRC != "" {
 				lines = lyrics.FromSource(&music.Lyrics{
@@ -876,6 +876,33 @@ func (p *Player) loadLyrics(gen int, src music.Source, t music.Track) {
 				}
 			}
 		}
+
+		// If NetEase didn't match (or not YouTube), query the source's own lyrics
+		if len(lines) == 0 && src != nil && src.Can("lyrics") {
+			if l, err := src.Lyrics(t.ID); err == nil && l != nil {
+				lines = lyrics.FromSource(l)
+			}
+		}
+
+		// Universal fallback to NetEase matching if source had no lyrics
+		if len(lines) == 0 {
+			match := netease.Match(t.ArtistNames(), t.Name)
+			if match != nil && match.LyricsLRC != "" {
+				lines = lyrics.FromSource(&music.Lyrics{
+					LRC:         match.LyricsLRC,
+					Translation: match.Translation,
+				})
+				if t.Album.ImageURL == "" && match.CoverURL != "" {
+					p.post(func() {
+						if gen == p.gen {
+							t.Album.ImageURL = match.CoverURL
+							p.sync()
+						}
+					})
+				}
+			}
+		}
+
 		p.post(func() {
 			if gen == p.gen {
 				p.lyrics = lines

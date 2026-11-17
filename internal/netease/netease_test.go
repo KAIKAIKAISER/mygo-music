@@ -19,3 +19,23 @@ func TestMatch(t *testing.T) {
 		t.Error("expected non-empty lyrics LRC")
 	}
 }
+
+func TestMatchYouTubeNoise(t *testing.T) {
+	res := Match("YOASOBI", "夜に駆ける (Official Music Video)")
+	if res == nil {
+		t.Fatal("expected match for youtube title, got nil")
+	}
+	if res.LyricsLRC == "" {
+		t.Error("expected non-empty lyrics LRC for YOASOBI")
+	}
+}
+
+func TestMatchTopicArtist(t *testing.T) {
+	res := Match("Taylor Swift - Topic", "Cruel Summer")
+	if res == nil {
+		t.Fatal("expected match for topic artist, got nil")
+	}
+	if res.LyricsLRC == "" {
+		t.Error("expected non-empty lyrics LRC for Taylor Swift")
+	}
+}

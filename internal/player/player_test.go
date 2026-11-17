@@ -325,3 +325,32 @@ func TestShuffleOrderHead(t *testing.T) {
 		t.Errorf("picked song is at %v", p.order)
 	}
 }
+
+// YouTube Music tracks match NetEase Cloud Music timed & translated lyrics.
+func TestYouTubeTrackMatchesNetEaseLyrics(t *testing.T) {
+	ch := make(chan func(), 16)
+	p := New(func(fn func()) { ch <- fn })
+	tr := music.Track{
+		ID:     "yt-test-1",
+		Source: "youtube-music",
+		Name:   "Radioactive",
+		Artists: []music.Artist{
+			{Name: "Imagine Dragons"},
+		},
+	}
+	p.loadLyrics(0, nil, tr)
+
+	deadline := time.After(5 * time.Second)
+	for {
+		select {
+		case fn := <-ch:
+			fn()
+			lines, loaded := p.Lyrics()
+			if loaded && len(lines) > 0 {
+				return
+			}
+		case <-deadline:
+			t.Fatal("timed out waiting for NetEase lyrics match on YouTube track")
+		}
+	}
+}
