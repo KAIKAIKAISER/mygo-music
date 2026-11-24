@@ -49,6 +49,9 @@ var (
 	iconPalette       = strokeIcon(`<circle cx="13.5" cy="6.5" r=".5"/><circle cx="17.5" cy="10.5" r=".5"/><circle cx="8.5" cy="7.5" r=".5"/><circle cx="6.5" cy="12.5" r=".5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.9 0 1.7-.7 1.7-1.7 0-.4-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.2 0-.9.7-1.7 1.7-1.7h2c3.3 0 6-2.7 6-6 0-5.5-4.5-10-10-10z"/>`)
 	iconFontSize      = strokeIcon(`<path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/>`)
 	iconMove          = strokeIcon(`<path d="m5 9-3 3 3 3"/><path d="m9 5 3-3 3 3"/><path d="m15 19 3 3-3 3"/><path d="m19 9 3 3-3 3"/><path d="M2 12h20"/><path d="M12 2v20"/>`)
+	iconAlignLeft     = strokeIcon(`<path d="M21 6H3"/><path d="M15 12H3"/><path d="M17 18H3"/>`)
+	iconAlignCenter   = strokeIcon(`<path d="M21 6H3"/><path d="M17 12H7"/><path d="M19 18H5"/>`)
+	iconAlignRight    = strokeIcon(`<path d="M21 6H3"/><path d="M21 12H9"/><path d="M21 18H7"/>`)
 )
 
 var (

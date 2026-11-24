@@ -11,6 +11,21 @@ import (
 	"mygo-music/internal/lyrics"
 )
 
+const (
+	anchorCenter = "center"
+	anchorLeft   = "left"
+	anchorRight  = "right"
+)
+
+var lyricsAnchors = []struct {
+	id    string
+	label string
+}{
+	{anchorCenter, "Anchor Center"},
+	{anchorRight, "Anchor Right"},
+	{anchorLeft, "Anchor Left"},
+}
+
 type lyricsTheme struct {
 	id    string
 	name  string
@@ -18,12 +33,12 @@ type lyricsTheme struct {
 }
 
 var lyricsThemes = []lyricsTheme{
-	{"gold", "Sunset Gold", ui.RGB(255, 184, 0)},     // NetEase Gold #FFB800
-	{"cyan", "Aurora Cyan", ui.RGB(0, 226, 255)},     // Aurora Cyan #00E2FF
-	{"red", "Vibrant Red", ui.RGB(255, 75, 75)},       // Vibrant Red #FF4B4B
-	{"green", "Fresh Green", ui.RGB(38, 222, 129)},    // Fresh Green #26DE81
-	{"pink", "Sakura Pink", ui.RGB(255, 107, 129)},    // Sakura Pink #FF6B81
-	{"white", "Pure White", ui.RGB(255, 255, 255)},    // Pure White #FFFFFF
+	{"gold", "Sunset Gold", ui.RGB(255, 184, 0)},   // NetEase Gold #FFB800
+	{"cyan", "Aurora Cyan", ui.RGB(0, 226, 255)},   // Aurora Cyan #00E2FF
+	{"red", "Vibrant Red", ui.RGB(255, 75, 75)},    // Vibrant Red #FF4B4B
+	{"green", "Fresh Green", ui.RGB(38, 222, 129)}, // Fresh Green #26DE81
+	{"pink", "Sakura Pink", ui.RGB(255, 107, 129)}, // Sakura Pink #FF6B81
+	{"white", "Pure White", ui.RGB(255, 255, 255)}, // Pure White #FFFFFF
 }
 
 type fontOption struct {
@@ -76,41 +91,156 @@ type desktopLyrics struct {
 	a   *app
 	win *mygo.Window
 
-	w, h        float32
-	centerX     float32
-	screenY     float32
-	locked      bool
-	mouseInside bool
-	overUnlock  bool
+	w, h           float32
+	anchorMode     string
+	anchorRightGap float32
+	anchorLeftGap  float32
+	centerX        float32
+	screenY        float32
 
-	lastLine1      string
-	lastLine2      string
-	lastFontSize   float32
-	lastFontFamily string
-	targetW        float32
-	targetH        float32
+	locked       bool
+	mouseInside  bool
+	overUnlock   bool
+	toolbarHover bool
+
+	updatingBounds  bool
+	ignoreMoveUntil time.Time
+	expectedBounds  mygo.Rectangle
+	saveTimer       *time.Timer
+
+	lastLine1        string
+	lastLine2        string
+	lastFontSize     float32
+	lastFontFamily   string
+	lastAnchor       string
+	lastToolbarHover bool
+	targetW          float32
+	targetH          float32
+}
+
+func displayWorkArea(disp mygo.Display) mygo.Rectangle {
+	area := disp.WorkArea
+	if area.Width <= 0 || area.Height <= 0 {
+		area = disp.Bounds
+	}
+	if area.Width <= 0 || area.Height <= 0 {
+		area = mygo.Rectangle{X: 0, Y: 0, Width: 1920, Height: 1080}
+	}
+	return area
+}
+
+func clampFloat(v, minV, maxV float32) float32 {
+	if maxV < minV {
+		return minV
+	}
+	if v < minV {
+		return minV
+	}
+	if v > maxV {
+		return maxV
+	}
+	return v
+}
+
+// classifyDragAnchor determines the anchor mode and gap from a manually dragged window bounds.
+// Near the right or left screen edge (within 180px), it locks to that edge so shrinking/growing
+// lyrics stay pinned flush against the edge instead of drifting toward the center.
+func classifyDragAnchor(area, b mygo.Rectangle, edgeSnapThreshold float32) (mode string, rightGap, leftGap, centerX float32) {
+	lGap := float32(b.X - area.X)
+	rGap := float32(area.X+area.Width) - float32(b.X+b.Width)
+
+	if rGap <= edgeSnapThreshold && rGap < lGap {
+		return anchorRight, max(0, rGap), 0, float32(b.X) + float32(b.Width)/2
+	}
+	if lGap <= edgeSnapThreshold && lGap <= rGap {
+		return anchorLeft, 0, max(0, lGap), float32(b.X) + float32(b.Width)/2
+	}
+	return anchorCenter, 0, 0, float32(b.X) + float32(b.Width)/2
+}
+
+// computeLyricsMaxWidth computes the maximum window width allowed from the current anchor
+// before reaching the opposite edge of the work area.
+func computeLyricsMaxWidth(area mygo.Rectangle, anchor string, rightGap, leftGap, minWinW float32) float32 {
+	var maxW float32
+	switch anchor {
+	case anchorRight:
+		gap := clampFloat(rightGap, 0, float32(area.Width)/2)
+		rightEdge := float32(area.X+area.Width) - gap
+		maxW = rightEdge - float32(area.X+8)
+	case anchorLeft:
+		gap := clampFloat(leftGap, 0, float32(area.Width)/2)
+		leftEdge := float32(area.X) + gap
+		maxW = float32(area.X+area.Width-8) - leftEdge
+	default:
+		maxW = float32(area.Width - 16)
+	}
+	if float32(area.Width-16) < minWinW {
+		return float32(max(100, area.Width-8))
+	}
+	if maxW < minWinW {
+		return minWinW
+	}
+	return maxW
+}
+
+// computeLyricsOrigin calculates the window's top-left X, Y coordinates according to its anchor mode.
+func computeLyricsOrigin(area mygo.Rectangle, anchor string, rightGap, leftGap, centerX, screenY, targetW, targetH float32) (int, int) {
+	var x float32
+	switch anchor {
+	case anchorRight:
+		rightEdge := float32(area.X+area.Width) - max(0, rightGap)
+		x = rightEdge - targetW
+	case anchorLeft:
+		x = float32(area.X) + max(0, leftGap)
+	default:
+		if centerX <= 0 {
+			centerX = float32(area.X) + float32(area.Width)/2
+		}
+		x = centerX - targetW/2
+	}
+
+	newX := int(math.Round(float64(x)))
+	newY := int(math.Round(float64(screenY)))
+
+	minX := area.X + 4
+	maxX := area.X + area.Width - 4 - int(targetW)
+	if maxX < minX {
+		maxX = minX
+	}
+	if newX > maxX {
+		newX = maxX
+	}
+	if newX < minX {
+		newX = minX
+	}
+
+	minY := area.Y + 4
+	maxY := area.Y + area.Height - 4 - int(targetH)
+	if maxY < minY {
+		maxY = minY
+	}
+	if newY > maxY {
+		newY = maxY
+	}
+	if newY < minY {
+		newY = minY
+	}
+
+	return newX, newY
 }
 
 func newDesktopLyrics(a *app) *desktopLyrics {
 	d := &desktopLyrics{a: a}
 
 	disp := mygo.Screen.PrimaryDisplay()
-	area := disp.WorkArea
-	if area.Width == 0 || area.Height == 0 {
-		area = disp.Bounds
-	}
-	defaultW := 520
-	defaultH := 130
+	area := displayWorkArea(disp)
+	defaultW := 220
+	defaultH := 120
 	d.w = float32(defaultW)
 	d.h = float32(defaultH)
-
-	if area.Width > 0 && area.Height > 0 {
-		d.centerX = float32(area.X + area.Width/2)
-		d.screenY = float32(area.Y + area.Height - defaultH - 70)
-	} else {
-		d.centerX = 600
-		d.screenY = 700
-	}
+	d.centerX = float32(area.X + area.Width/2)
+	d.screenY = float32(area.Y + area.Height - defaultH - 70)
+	d.anchorMode = anchorCenter
 
 	d.win = mygo.NewWindow(mygo.WindowOptions{
 		Title:           Tf("%s Desktop Lyrics", mygo.App.Name()),
@@ -132,12 +262,46 @@ func newDesktopLyrics(a *app) *desktopLyrics {
 
 	initB := d.win.Bounds()
 	if initB.Width > 0 && initB.Height > 0 {
-		d.centerX = float32(initB.X) + float32(initB.Width)/2
+		disp = mygo.Screen.DisplayMatching(initB)
+		area = displayWorkArea(disp)
 		d.screenY = float32(initB.Y)
 		d.w = float32(initB.Width)
 		d.h = float32(initB.Height)
 	}
 
+	if a.settings.DesktopLyricsAnchor != "" {
+		d.anchorMode = a.settings.DesktopLyricsAnchor
+		d.anchorRightGap = a.settings.DesktopLyricsRightGap
+		d.anchorLeftGap = a.settings.DesktopLyricsLeftGap
+		d.centerX = a.settings.DesktopLyricsCenterX
+		if d.anchorMode == anchorCenter && d.centerX <= 0 {
+			if initB.Width > 0 {
+				d.centerX = float32(initB.X) + float32(initB.Width)/2
+			} else {
+				d.centerX = float32(area.X + area.Width/2)
+			}
+		}
+	} else if initB.Width > 0 {
+		// Migrate legacy window-state position: if it sat in the right/left edge zone,
+		// anchor cleanly to the edge so lyrics never drift away after long lines.
+		mode, _, _, cx := classifyDragAnchor(area, initB, 200)
+		d.anchorMode = mode
+		switch mode {
+		case anchorRight:
+			d.anchorRightGap = 8
+		case anchorLeft:
+			d.anchorLeftGap = 8
+		default:
+			d.centerX = cx
+		}
+		a.settings.DesktopLyricsAnchor = d.anchorMode
+		a.settings.DesktopLyricsRightGap = d.anchorRightGap
+		a.settings.DesktopLyricsLeftGap = d.anchorLeftGap
+		a.settings.DesktopLyricsCenterX = d.centerX
+		a.settings.save()
+	}
+
+	d.expectedBounds = initB
 	removeWindowBorder(d.win.NativeHandle())
 
 	d.win.OnShow(func() {
@@ -146,10 +310,10 @@ func newDesktopLyrics(a *app) *desktopLyrics {
 
 	d.win.OnMove(func() {
 		b := d.win.Bounds()
-		if b.Width > 0 {
-			d.centerX = float32(b.X) + float32(b.Width)/2
-			d.screenY = float32(b.Y)
+		if b.Width <= 0 || d.isProgrammaticMove(b) {
+			return
 		}
+		d.updateAnchorFromDrag(b)
 	})
 
 	d.win.OnClose(func(e *mygo.CloseEvent) {
@@ -166,6 +330,67 @@ func newDesktopLyrics(a *app) *desktopLyrics {
 	}
 
 	return d
+}
+
+func (d *desktopLyrics) effectiveAnchor() string {
+	switch d.anchorMode {
+	case anchorRight, anchorLeft, anchorCenter:
+		return d.anchorMode
+	default:
+		return anchorCenter
+	}
+}
+
+func (d *desktopLyrics) isProgrammaticMove(b mygo.Rectangle) bool {
+	if d.updatingBounds {
+		return true
+	}
+	if time.Now().Before(d.ignoreMoveUntil) {
+		dx := math.Abs(float64(b.X - d.expectedBounds.X))
+		dy := math.Abs(float64(b.Y - d.expectedBounds.Y))
+		if dx <= 4 && dy <= 4 {
+			return true
+		}
+		if b.Width != int(math.Round(float64(d.w))) || b.Height != int(math.Round(float64(d.h))) {
+			return true
+		}
+	}
+	return false
+}
+
+func (d *desktopLyrics) updateAnchorFromDrag(b mygo.Rectangle) {
+	disp := mygo.Screen.DisplayMatching(b)
+	area := displayWorkArea(disp)
+	mode, rGap, lGap, cx := classifyDragAnchor(area, b, 160)
+
+	d.anchorMode = mode
+	d.anchorRightGap = rGap
+	d.anchorLeftGap = lGap
+	d.centerX = cx
+	d.screenY = float32(b.Y)
+	d.expectedBounds = b
+	d.scheduleSaveAnchor()
+}
+
+func (d *desktopLyrics) scheduleSaveAnchor() {
+	if d.saveTimer != nil {
+		d.saveTimer.Stop()
+	}
+	mode := d.anchorMode
+	rGap := d.anchorRightGap
+	lGap := d.anchorLeftGap
+	cx := d.centerX
+	d.saveTimer = time.AfterFunc(350*time.Millisecond, func() {
+		if d.a != nil {
+			d.a.post(func() {
+				d.a.settings.DesktopLyricsAnchor = mode
+				d.a.settings.DesktopLyricsRightGap = rGap
+				d.a.settings.DesktopLyricsLeftGap = lGap
+				d.a.settings.DesktopLyricsCenterX = cx
+				d.a.settings.save()
+			})
+		}
+	})
 }
 
 func (d *desktopLyrics) show() {
@@ -186,6 +411,7 @@ func (d *desktopLyrics) applyLock(locked bool) {
 	d.locked = locked
 	d.mouseInside = false
 	d.overUnlock = false
+	d.toolbarHover = false
 	if d.win != nil {
 		d.win.SetIgnoreMouseEvents(locked)
 		d.win.Invalidate()
@@ -222,7 +448,7 @@ func (d *desktopLyrics) view(c *ui.Context) {
 		line1Text = mygo.App.Name()
 	}
 
-	// Line 2: Next upcoming line or translation
+	// Line 2: Translation or next upcoming line
 	line2Text := ""
 	if cur >= 0 && cur < len(lines) {
 		if lines[cur].Translation != "" {
@@ -234,10 +460,57 @@ func (d *desktopLyrics) view(c *ui.Context) {
 		line2Text = tr.ArtistNames()
 	}
 
+	locked := a.settings.DesktopLyricsLocked
+	fontSize := a.desktopLyricsFontSize()
+	fontFamily := getFontFamily(a.settings.DesktopLyricsFont)
+	activeColor := getLyricsColor(a.settings.DesktopLyricsColor)
+	secondaryColor := ui.RGBA(255, 255, 255, 0.78)
+	anchor := d.effectiveAnchor()
+
+	b := d.win.Bounds()
+	disp := mygo.Screen.DisplayMatching(b)
+	area := displayWorkArea(disp)
+
+	// Cursor hover tracking (both locked unlock-button and unlocked auto-expanding toolbar)
+	if d.win != nil && d.win.IsVisible() {
+		pt := mygo.Screen.CursorScreenPoint()
+		inside := pt.X >= b.X && pt.X < b.X+b.Width && pt.Y >= b.Y && pt.Y < b.Y+b.Height
+		if locked {
+			c.After(50 * time.Millisecond)
+			btnW, btnH := min(max(100, b.Width-16), 132), 36
+			var btnX int
+			switch anchor {
+			case anchorRight:
+				btnX = b.X + b.Width - 12 - btnW
+			case anchorLeft:
+				btnX = b.X + 12
+			default:
+				btnX = b.X + (b.Width-btnW)/2
+			}
+			btnY := b.Y + 2
+			overBtn := inside && pt.X >= btnX && pt.X <= btnX+btnW && pt.Y >= btnY && pt.Y <= btnY+btnH
+
+			if inside != d.mouseInside || overBtn != d.overUnlock {
+				d.mouseInside = inside
+				d.overUnlock = overBtn
+				d.win.SetIgnoreMouseEvents(!overBtn)
+				d.win.Invalidate()
+			}
+		} else {
+			d.mouseInside = false
+			d.overUnlock = false
+			if inside != d.toolbarHover {
+				d.toolbarHover = inside
+			}
+			if inside {
+				c.After(80 * time.Millisecond)
+			}
+		}
+	}
+
 	// Schedule redraw while playing; if paused, periodically check hover
 	if pl.Playing() {
 		if cur >= 0 && cur < len(lines) && len(lines[cur].Words) > 0 {
-			// Syllable / karaoke precision (25 fps).
 			c.After(40 * time.Millisecond)
 		} else if cur+1 < len(lines) {
 			diff := lines[cur+1].At - pos + 20*time.Millisecond
@@ -249,30 +522,17 @@ func (d *desktopLyrics) view(c *ui.Context) {
 			c.After(100 * time.Millisecond)
 		}
 	} else {
-		c.After(300 * time.Millisecond)
+		c.After(250 * time.Millisecond)
 	}
 
-	locked := a.settings.DesktopLyricsLocked
-	fontSize := a.desktopLyricsFontSize()
-	fontFamily := getFontFamily(a.settings.DesktopLyricsFont)
-	activeColor := getLyricsColor(a.settings.DesktopLyricsColor)
-	secondaryColor := ui.RGBA(255, 255, 255, 0.78)
-
-	// Window bounds and display work area
-	b := d.win.Bounds()
-	disp := mygo.Screen.DisplayMatching(b)
-	area := disp.WorkArea
-	if area.Width == 0 || area.Height == 0 {
-		area = disp.Bounds
+	// Minimum width stays compact when toolbar isn't shown so short lyrics tightly hug the screen edge
+	padX := float32(12)
+	strokeBuf := float32(10)
+	minWinW := float32(128)
+	if !locked && d.toolbarHover {
+		minWinW = 396
 	}
-	if area.Width == 0 || area.Height == 0 {
-		area = mygo.Rectangle{X: 0, Y: 0, Width: 1920, Height: 1080}
-	}
-
-	maxScreenW := float32(area.Width - 32)
-	if maxScreenW < 380 {
-		maxScreenW = 380
-	}
+	maxWinW := computeLyricsMaxWidth(area, anchor, d.anchorRightGap, d.anchorLeftGap, minWinW)
 
 	// 1. Measure natural single-line width of both lines
 	baseSize2 := max(15, fontSize*0.72)
@@ -282,44 +542,33 @@ func (d *desktopLyrics) view(c *ui.Context) {
 		w2, h2Natural = measureTextSize(c, line2Text, fontFamily, baseSize2, 600, 0)
 	}
 
-	// Content width needed
+	// 2. Tight adaptive width bounded by anchor-aware maxWinW
 	contentW := max(w1, w2)
-	minWinW := float32(380)
-	neededW := max(minWinW, contentW+48)
+	neededW := max(minWinW, contentW+padX*2+strokeBuf)
+	targetW := min(neededW, maxWinW)
+	usableW := max(80, targetW-padX*2)
 
-	// Dynamic target width
-	targetW := neededW
-	if targetW > maxScreenW {
-		targetW = maxScreenW
-	}
-
-	// Usable width for text inside window
-	usableW := targetW - 48
-	if usableW < 320 {
-		usableW = 320
-	}
-
-	// 2. Adaptive font size and wrapping check
+	// 3. Adaptive font downscale or wrapping when text exceeds usableW
 	line1FontSize := fontSize
 	line2FontSize := baseSize2
+	wrapLimit1 := max(80, usableW-4)
+	wrapLimit2 := max(80, usableW-4)
 
 	line1WrappedH := h1Natural
-	if w1 > usableW && w1 > 0 {
-		if w1 <= usableW*1.22 {
-			// Fits with mild downscaling (up to 18% downscale)
-			scale := usableW / w1
+	if w1 > wrapLimit1 && w1 > 0 {
+		if w1 <= wrapLimit1*1.22 {
+			scale := wrapLimit1 / w1
 			line1FontSize = max(18.0, fontSize*scale)
 		} else {
-			// Wrap to multiple lines; downscale slightly for comfortable reading
 			line1FontSize = max(20.0, fontSize*0.88)
 			_, line1WrappedH = measureTextSize(c, line1Text, fontFamily, line1FontSize, 800, usableW)
 		}
 	}
 
 	line2WrappedH := h2Natural
-	if w2 > usableW && w2 > 0 {
-		if w2 <= usableW*1.22 {
-			scale := usableW / w2
+	if w2 > wrapLimit2 && w2 > 0 {
+		if w2 <= wrapLimit2*1.22 {
+			scale := wrapLimit2 / w2
 			line2FontSize = max(13.0, baseSize2*scale)
 		} else {
 			line2FontSize = max(14.0, baseSize2*0.9)
@@ -327,60 +576,36 @@ func (d *desktopLyrics) view(c *ui.Context) {
 		}
 	}
 
-	// 3. Dynamic target height
-	// Toolbar/unlock row: 28px; top/bottom padding: 16px; gap: 6px
-	totalNeededH := 28 + line1WrappedH + 16
+	// 4. Dynamic target height
+	totalNeededH := 28 + line1WrappedH + 14
 	if line2Text != "" {
 		totalNeededH += line2WrappedH + 6
 	}
-	targetH := max(130.0, totalNeededH+8)
-	if targetH > float32(area.Height-20) {
-		targetH = float32(area.Height - 20)
+	targetH := max(116.0, totalNeededH+8)
+	if targetH > float32(area.Height-16) {
+		targetH = float32(area.Height - 16)
 	}
 
-	// 4. Calculate adaptive position based on preferred center
-	if d.centerX <= 0 {
-		if b.Width > 0 {
-			d.centerX = float32(b.X) + float32(b.Width)/2
-		} else {
-			d.centerX = float32(area.X + area.Width/2)
-		}
-	}
-	if d.screenY <= 0 {
-		if b.Height > 0 {
-			d.screenY = float32(b.Y)
-		} else {
-			d.screenY = float32(area.Y + area.Height - int(targetH) - 70)
-		}
-	}
+	// 5. Anchor-preserving window position
+	newX, newY := computeLyricsOrigin(area, anchor, d.anchorRightGap, d.anchorLeftGap, d.centerX, d.screenY, targetW, targetH)
 
-	newX := int(d.centerX - targetW/2)
-	newY := int(d.screenY)
-
-	// Keep smoothly within screen boundaries
-	if newX+int(targetW) > area.X+area.Width-10 {
-		newX = area.X + area.Width - 10 - int(targetW)
-	}
-	if newX < area.X+10 {
-		newX = area.X + 10
-	}
-	if newY+int(targetH) > area.Y+area.Height-10 {
-		newY = area.Y + area.Height - 10 - int(targetH)
-	}
-	if newY < area.Y+10 {
-		newY = area.Y + 10
-	}
-
-	// 5. Update bounds only when content changes or geometry significantly shifts
-	contentChanged := line1Text != d.lastLine1 || line2Text != d.lastLine2 || fontSize != d.lastFontSize || fontFamily != d.lastFontFamily
-	sizeShift := math.Abs(float64(float32(b.Width)-targetW)) >= 8 || math.Abs(float64(float32(b.Height)-targetH)) >= 8
-	posShift := math.Abs(float64(b.X-newX)) >= 8 || math.Abs(float64(b.Y-newY)) >= 8
+	// 6. Update bounds immediately when text/anchor/hover/size shifts
+	contentChanged := line1Text != d.lastLine1 ||
+		line2Text != d.lastLine2 ||
+		fontSize != d.lastFontSize ||
+		fontFamily != d.lastFontFamily ||
+		anchor != d.lastAnchor ||
+		d.toolbarHover != d.lastToolbarHover
+	sizeShift := math.Abs(float64(float32(b.Width)-targetW)) >= 2 || math.Abs(float64(float32(b.Height)-targetH)) >= 2
+	posShift := math.Abs(float64(b.X-newX)) >= 2 || math.Abs(float64(b.Y-newY)) >= 2
 
 	if contentChanged || sizeShift || posShift {
 		d.lastLine1 = line1Text
 		d.lastLine2 = line2Text
 		d.lastFontSize = fontSize
 		d.lastFontFamily = fontFamily
+		d.lastAnchor = anchor
+		d.lastToolbarHover = d.toolbarHover
 		d.targetW = targetW
 		d.targetH = targetH
 		d.w = targetW
@@ -389,39 +614,31 @@ func (d *desktopLyrics) view(c *ui.Context) {
 		newBounds := mygo.Rectangle{
 			X:      newX,
 			Y:      newY,
-			Width:  int(targetW),
-			Height: int(targetH),
+			Width:  int(math.Round(float64(targetW))),
+			Height: int(math.Round(float64(targetH))),
 		}
 		if newBounds != b {
+			d.updatingBounds = true
+			d.expectedBounds = newBounds
+			d.ignoreMoveUntil = time.Now().Add(400 * time.Millisecond)
 			d.win.SetBounds(newBounds)
 			b = d.win.Bounds()
+			d.expectedBounds = b
+			d.updatingBounds = false
 		}
 	}
 
-	if locked {
-		c.After(50 * time.Millisecond)
-		if d.win != nil && d.win.IsVisible() {
-			pt := mygo.Screen.CursorScreenPoint()
-			inside := pt.X >= b.X && pt.X < b.X+b.Width && pt.Y >= b.Y && pt.Y < b.Y+b.Height
-
-			btnW, btnH := 180, 36
-			btnX := b.X + (b.Width-btnW)/2
-			btnY := b.Y + 2
-			overBtn := inside && pt.X >= btnX && pt.X <= btnX+btnW && pt.Y >= btnY && pt.Y <= btnY+btnH
-
-			if inside != d.mouseInside || overBtn != d.overUnlock {
-				d.mouseInside = inside
-				d.overUnlock = overBtn
-				d.win.SetIgnoreMouseEvents(!overBtn)
-				d.win.Invalidate()
-			}
-		}
-	} else {
-		d.mouseInside = false
-		d.overUnlock = false
+	var align ui.Align
+	switch anchor {
+	case anchorRight:
+		align = ui.End
+	case anchorLeft:
+		align = ui.Start
+	default:
+		align = ui.Center
 	}
 
-	wrap := ui.Box(c.Key("desktop-wrap")).Fill().Padding(4, 16).Background(ui.Transparent)
+	wrap := ui.Box(c.Key("desktop-wrap")).Fill().Padding(4, padX).Background(ui.Transparent)
 	if !locked {
 		wrap.DragWindow()
 	}
@@ -430,14 +647,14 @@ func (d *desktopLyrics) view(c *ui.Context) {
 		ui.Column(c).Fill().Justify(ui.SpaceBetween).Children(func() {
 			// Top row: hover toolbar when unlocked, or unlock button when locked and mouse is over lyrics
 			if !locked {
-				if wrap.Hovered() {
-					d.toolbar(c, activeColor)
+				if d.toolbarHover || wrap.Hovered() {
+					d.toolbar(c, activeColor, align)
 				} else {
 					ui.Box(c).Height(28)
 				}
 			} else {
 				if d.mouseInside {
-					ui.Row(c.Key("unlock-wrap")).Height(28).Justify(ui.Center).Children(func() {
+					ui.Row(c.Key("unlock-wrap")).Height(28).Justify(align).Children(func() {
 						btn := ui.ButtonBase(c.Key("unlock-btn")).Height(28).PaddingX(14).Gap(6).Radius(14).
 							Background(ui.RGBA(25, 25, 30, 0.94)).
 							Border(0.8, ui.RGBA(255, 255, 255, 0.3)).
@@ -459,11 +676,10 @@ func (d *desktopLyrics) view(c *ui.Context) {
 				}
 			}
 
-			// Lyrics container (auto-centered, wrapping text at usableW)
-			ui.Column(c.Key("lyrics-container")).Grow(1).Justify(ui.Center).AlignItems(ui.Center).Gap(6).Children(func() {
+			// Lyrics container aligned to anchor so short/long lyrics stay anchored cleanly
+			ui.Column(c.Key("lyrics-container")).Grow(1).Justify(ui.Center).AlignItems(align).Gap(6).Children(func() {
 				if len(currentWords) > 0 && cur >= 0 && cur < len(lines) {
-					// Karaoke word-by-word lighting up!
-					rt := ui.RichText(c.Key("rt1")).Width(usableW).TextAlign(ui.Center).
+					rt := ui.RichText(c.Key("rt1")).Width(usableW).TextAlign(align).
 						FontSize(line1FontSize).FontWeight(800).
 						LineHeight(1.2).LetterSpacing(-0.2).
 						TextStroke(2.2, ui.RGBA(0, 0, 0, 0.8)).
@@ -479,7 +695,7 @@ func (d *desktopLyrics) view(c *ui.Context) {
 						}
 					})
 				} else {
-					el := ui.Text(c.Key("txt1"), line1Text).Width(usableW).TextAlign(ui.Center).
+					el := ui.Text(c.Key("txt1"), line1Text).Width(usableW).TextAlign(align).
 						FontSize(line1FontSize).FontWeight(800).
 						LineHeight(1.2).LetterSpacing(-0.2).
 						TextColor(activeColor).
@@ -491,7 +707,7 @@ func (d *desktopLyrics) view(c *ui.Context) {
 				}
 
 				if line2Text != "" {
-					el := ui.Text(c.Key("txt2"), line2Text).Width(usableW).TextAlign(ui.Center).
+					el := ui.Text(c.Key("txt2"), line2Text).Width(usableW).TextAlign(align).
 						FontSize(line2FontSize).FontWeight(600).
 						LineHeight(1.2).LetterSpacing(-0.1).
 						TextColor(secondaryColor).
@@ -570,11 +786,11 @@ func estimateTextWidth(text string, fontSize float32) float32 {
 	return total + fontSize*0.2
 }
 
-func (d *desktopLyrics) toolbar(c *ui.Context, activeColor ui.Color) {
+func (d *desktopLyrics) toolbar(c *ui.Context, activeColor ui.Color, justify ui.Align) {
 	a := d.a
 	pl := a.pl
 
-	ui.Row(c.Key("tb-wrap")).Justify(ui.Center).Children(func() {
+	ui.Row(c.Key("tb-wrap")).Justify(justify).Children(func() {
 		ui.Row(c.Key("tb")).Height(28).PaddingX(10).Gap(6).Radius(14).
 			Background(ui.RGBA(25, 25, 30, 0.92)).
 			Border(0.5, ui.RGBA(255, 255, 255, 0.2)).
@@ -641,6 +857,21 @@ func (d *desktopLyrics) toolbar(c *ui.Context, activeColor ui.Color) {
 				ui.Text(c, "Aa").FontSize(11).FontWeight(700).TextColor(ui.RGBA(255, 255, 255, 0.85))
 			})
 
+			// Anchor alignment cycle (Center / Anchor Right / Anchor Left)
+			alignIcon := iconAlignCenter
+			alignLabel := T("Anchor Center")
+			switch d.effectiveAnchor() {
+			case anchorRight:
+				alignIcon = iconAlignRight
+				alignLabel = T("Anchor Right")
+			case anchorLeft:
+				alignIcon = iconAlignLeft
+				alignLabel = T("Anchor Left")
+			}
+			if toolIconBtn(c.Key("align-btn"), alignIcon, 13, ui.RGBA(255, 255, 255, 0.85), alignLabel).Clicked() {
+				a.cycleDesktopLyricsAnchor()
+			}
+
 			// Divider
 			ui.Box(c).Width(1).Height(14).Background(ui.RGBA(255, 255, 255, 0.2))
 
@@ -703,6 +934,56 @@ func (a *app) setDesktopLyricsLocked(locked bool) {
 
 func (a *app) toggleDesktopLyricsLock() {
 	a.setDesktopLyricsLocked(!a.settings.DesktopLyricsLocked)
+}
+
+func (a *app) setDesktopLyricsAnchor(anchor string) {
+	switch anchor {
+	case anchorRight, anchorLeft, anchorCenter:
+	default:
+		anchor = anchorCenter
+	}
+
+	a.settings.DesktopLyricsAnchor = anchor
+	if d := a.desktopLyrics; d != nil {
+		d.anchorMode = anchor
+		area := displayWorkArea(mygo.Screen.PrimaryDisplay())
+		if d.win != nil {
+			area = displayWorkArea(mygo.Screen.DisplayMatching(d.win.Bounds()))
+		}
+		switch anchor {
+		case anchorRight:
+			d.anchorRightGap = 8
+			a.settings.DesktopLyricsRightGap = 8
+		case anchorLeft:
+			d.anchorLeftGap = 8
+			a.settings.DesktopLyricsLeftGap = 8
+		default:
+			d.centerX = float32(area.X) + float32(area.Width)/2
+			a.settings.DesktopLyricsCenterX = d.centerX
+		}
+		if d.win != nil {
+			d.win.Invalidate()
+		}
+	}
+	a.settings.save()
+	a.redraw()
+}
+
+func (a *app) cycleDesktopLyricsAnchor() {
+	cur := anchorCenter
+	if a.desktopLyrics != nil {
+		cur = a.desktopLyrics.effectiveAnchor()
+	} else if a.settings.DesktopLyricsAnchor != "" {
+		cur = a.settings.DesktopLyricsAnchor
+	}
+	switch cur {
+	case anchorCenter:
+		a.setDesktopLyricsAnchor(anchorRight)
+	case anchorRight:
+		a.setDesktopLyricsAnchor(anchorLeft)
+	default:
+		a.setDesktopLyricsAnchor(anchorCenter)
+	}
 }
 
 func (a *app) cycleDesktopLyricsColor() {

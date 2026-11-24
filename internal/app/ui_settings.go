@@ -456,6 +456,23 @@ func (a *app) settingsSections(c *ui.Context, p palette) []settingsSection {
 				}
 			}
 		})
+		row(T("Desktop Lyrics Alignment"), T("Keep the lyrics anchored to the left edge, center, or right edge of the screen"), func() {
+			labels := make([]string, len(lyricsAnchors))
+			at := 0
+			curAnchor := s.DesktopLyricsAnchor
+			if curAnchor == "" {
+				curAnchor = anchorCenter
+			}
+			for i, an := range lyricsAnchors {
+				labels[i] = T(an.label)
+				if an.id == curAnchor {
+					at = i
+				}
+			}
+			if i, ok := choice(c, "desktop-lyrics-anchor", T("Desktop Lyrics Alignment"), labels, at); ok {
+				a.setDesktopLyricsAnchor(lyricsAnchors[i].id)
+			}
+		})
 	})
 
 	// Only on macOS, the one with a notch player.

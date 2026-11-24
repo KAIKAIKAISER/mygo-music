@@ -70,6 +70,11 @@ type settings struct {
 	DesktopLyricsFontSize float32 `json:"desktopLyricsFontSize,omitempty"`
 	// DesktopLyricsTwoLines shows two lines of lyrics (current line + next line). Default true.
 	DesktopLyricsTwoLines bool `json:"desktopLyricsTwoLines"`
+	// DesktopLyricsAnchor controls horizontal anchoring: "", "center", "left", "right".
+	DesktopLyricsAnchor   string  `json:"desktopLyricsAnchor,omitempty"`
+	DesktopLyricsRightGap float32 `json:"desktopLyricsRightGap,omitempty"`
+	DesktopLyricsLeftGap  float32 `json:"desktopLyricsLeftGap,omitempty"`
+	DesktopLyricsCenterX  float32 `json:"desktopLyricsCenterX,omitempty"`
 	// StageStyle is how the stage sets its lyrics (stageStyles): empty for
 	// Folia's classic, or the id of another of its visualizers.
 	StageStyle string `json:"stageStyle,omitempty"`
