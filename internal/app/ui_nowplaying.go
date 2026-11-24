@@ -510,6 +510,22 @@ func (a *app) paneTabs(c *ui.Context) {
 	for _, t := range a.npTabs() {
 		a.paneTab(c, t.pane, t.label)
 	}
+	if tr := a.pl.Current(); tr != nil && tr.ShowID == "" && (a.npPane == paneLyrics || a.npPane == paneStage) {
+		b := ui.ButtonBase(c.Key("choose-lyrics-tab")).Padding(6, 12).Radius(999).Gap(5).
+			AlignItems(ui.Center).FocusRing(false).Label(T("Choose Lyrics"))
+		bg, fg := white.Alpha(0.08), white.Alpha(0.7)
+		if b.Hovered() {
+			bg, fg = white.Alpha(0.16), white
+		}
+		b.Background(b.AnimateColor("bg", bg, ui.Animation{Duration: 120 * time.Millisecond}))
+		b.Children(func() {
+			ui.Icon(c, iconLyrics).Size(13, 13).TextColor(fg)
+			ui.Text(c, T("Choose Lyrics")).FontSize(12.5).FontWeight(600).TextColor(fg)
+		})
+		if b.Clicked() {
+			a.openLyricsPicker(tr)
+		}
+	}
 }
 
 // choosePane shows pane i in Now Playing, remembering lyrics or the stage,
@@ -626,7 +642,14 @@ func (a *app) lyricsPane(c *ui.Context, tr *music.Track, h float32) {
 				lyricsSkeleton(c, npShimmer(c))
 				return
 			}
-			ui.Text(c, T("No lyrics. Enjoy the music.")).FontSize(24).FontWeight(700).TextColor(white.Alpha(0.4))
+			ui.Column(c).Center().Gap(14).Children(func() {
+				ui.Text(c, T("No lyrics. Enjoy the music.")).FontSize(24).FontWeight(700).TextColor(white.Alpha(0.4))
+				if tr != nil && tr.ShowID == "" {
+					if pillButton(c.Key("choose-lyrics-empty"), iconSearch, T("Choose Online Lyrics"), white.Alpha(0.14), white).Clicked() {
+						a.openLyricsPicker(tr)
+					}
+				}
+			})
 		})
 		a.quietCard(c, dim, h*0.18)
 		return

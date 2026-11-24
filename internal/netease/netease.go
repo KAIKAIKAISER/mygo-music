@@ -16,6 +16,8 @@ type MatchResult struct {
 	SongID      int64
 	Title       string
 	Artist      string
+	Album       string
+	Duration    time.Duration
 	CoverURL    string
 	LyricsLRC   string
 	Translation string
@@ -24,6 +26,7 @@ type MatchResult struct {
 type nSong struct {
 	ID   int64  `json:"id"`
 	Name string `json:"name"`
+	Dt   int64  `json:"dt"`
 	Ar   []struct {
 		Name string `json:"name"`
 	} `json:"ar"`
@@ -33,10 +36,17 @@ type nSong struct {
 	} `json:"al"`
 }
 
+type cachedLyrics struct {
+	lrc   string
+	trans string
+}
+
 var (
-	cacheMu sync.RWMutex
-	cache   = make(map[string]*MatchResult)
-	client  = &http.Client{Timeout: 6 * time.Second}
+	cacheMu      sync.RWMutex
+	cache        = make(map[string]*MatchResult)
+	lyricCacheMu sync.RWMutex
+	lyricCache   = make(map[int64]cachedLyrics)
+	client       = &http.Client{Timeout: 6 * time.Second}
 
 	noiseRegex = regexp.MustCompile(`(?i)\s*[\(\[\{【](?:official\s*(?:music\s*)?(?:video|audio|mv|lyric\s*video|track|hd|4k|visualizer)?|mv|video|audio|lyrics?|full\s*(?:ver\.|version|audio)?|special\s*video|dance\s*practice|performance\s*video|m/v)[\)\]\}】]`)
 	topicRegex = regexp.MustCompile(`(?i)\s*-\s*topic\b`)
@@ -51,6 +61,24 @@ func cleanArtist(artist string) string {
 	a := topicRegex.ReplaceAllString(artist, "")
 	a = strings.TrimSuffix(a, " - Topic")
 	return strings.TrimSpace(a)
+}
+
+// SuggestQuery cleans YouTube / noisy track metadata into a concise NetEase search query.
+func SuggestQuery(artist, title string) string {
+	a := cleanArtist(strings.TrimSpace(artist))
+	t := cleanTitle(strings.TrimSpace(title))
+	if strings.Contains(t, " - ") && (a == "" || strings.EqualFold(a, "unknown artist") || strings.EqualFold(a, "various artists")) {
+		parts := strings.SplitN(t, " - ", 2)
+		a = cleanArtist(parts[0])
+		t = cleanTitle(parts[1])
+	}
+	if a != "" && !strings.EqualFold(a, "unknown artist") && !strings.EqualFold(a, "various artists") {
+		if t != "" {
+			return t + " " + a
+		}
+		return a
+	}
+	return t
 }
 
 // Match searches NetEase Cloud Music by artist and song title,
@@ -78,8 +106,67 @@ func Match(artist, title string) *MatchResult {
 	return res
 }
 
+// Search searches NetEase Cloud Music for up to limit candidate songs matching query.
+func Search(query string, limit int) []MatchResult {
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return nil
+	}
+	if limit <= 0 {
+		limit = 10
+	}
+	songs := searchCandidatesLimit(query, limit)
+	out := make([]MatchResult, 0, len(songs))
+	for _, s := range songs {
+		out = append(out, songToMatchResult(&s))
+	}
+	return out
+}
+
+// FetchLyrics fetches and caches LRC lyrics and translations for a NetEase song ID.
+func FetchLyrics(songID int64) (lrc string, trans string) {
+	if songID <= 0 {
+		return "", ""
+	}
+	lyricCacheMu.RLock()
+	if c, ok := lyricCache[songID]; ok {
+		lyricCacheMu.RUnlock()
+		return c.lrc, c.trans
+	}
+	lyricCacheMu.RUnlock()
+
+	lrc, trans = fetchLyrics(songID)
+	if lrc != "" || trans != "" {
+		lyricCacheMu.Lock()
+		lyricCache[songID] = cachedLyrics{lrc: lrc, trans: trans}
+		lyricCacheMu.Unlock()
+	}
+	return lrc, trans
+}
+
+func songToMatchResult(s *nSong) MatchResult {
+	var artists []string
+	for _, ar := range s.Ar {
+		if ar.Name != "" {
+			artists = append(artists, ar.Name)
+		}
+	}
+	return MatchResult{
+		SongID:   s.ID,
+		Title:    s.Name,
+		Artist:   strings.Join(artists, " / "),
+		Album:    s.Al.Name,
+		Duration: time.Duration(s.Dt) * time.Millisecond,
+		CoverURL: s.Al.PicURL,
+	}
+}
+
 func searchCandidates(query string) []nSong {
-	searchURL := "http://music.163.com/api/cloudsearch/pc?s=" + url.QueryEscape(query) + "&type=1&offset=0&limit=5"
+	return searchCandidatesLimit(query, 5)
+}
+
+func searchCandidatesLimit(query string, limit int) []nSong {
+	searchURL := fmt.Sprintf("http://music.163.com/api/cloudsearch/pc?s=%s&type=1&offset=0&limit=%d", url.QueryEscape(query), limit)
 	req, err := http.NewRequest("GET", searchURL, nil)
 	if err != nil {
 		return nil
@@ -181,7 +268,7 @@ func fetchMatch(artist, title string) *MatchResult {
 	var bestLRC, bestTrans string
 	for i := range songs {
 		s := &songs[i]
-		lrc, trans := fetchLyrics(s.ID)
+		lrc, trans := FetchLyrics(s.ID)
 		if lrc != "" {
 			bestSong = s
 			bestLRC = lrc
@@ -194,15 +281,8 @@ func fetchMatch(artist, title string) *MatchResult {
 		bestSong = &songs[0]
 	}
 
-	res := &MatchResult{
-		SongID:      bestSong.ID,
-		Title:       bestSong.Name,
-		CoverURL:    bestSong.Al.PicURL,
-		LyricsLRC:   bestLRC,
-		Translation: bestTrans,
-	}
-	if len(bestSong.Ar) > 0 {
-		res.Artist = bestSong.Ar[0].Name
-	}
-	return res
+	res := songToMatchResult(bestSong)
+	res.LyricsLRC = bestLRC
+	res.Translation = bestTrans
+	return &res
 }

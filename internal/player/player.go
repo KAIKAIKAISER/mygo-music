@@ -47,6 +47,8 @@ type Player struct {
 	// Changed, if set, hears that what plays, where it is or whether it
 	// plays changed.
 	Changed func()
+	// CustomLyrics, if set, returns user-selected override lyrics for a track.
+	CustomLyrics func(source, id string) *music.Lyrics
 
 	queue   []music.Track
 	order   []int // the queue's indices in play order: shuffled or not
@@ -448,6 +450,27 @@ func (p *Player) Repeat() RepeatMode { return p.repeat }
 
 // Lyrics returns the current track's lyrics, and whether they have loaded.
 func (p *Player) Lyrics() ([]lyrics.Line, bool) { return p.lyrics, p.lyricsLoaded }
+
+// ApplyLyrics immediately sets the current track's lyrics and notifies listeners.
+func (p *Player) ApplyLyrics(lines []lyrics.Line) {
+	p.lyrics, p.lyricsLoaded = lines, true
+	p.sync()
+}
+
+// ReloadLyrics clears current lyrics and re-runs lyric loading for the current track.
+func (p *Player) ReloadLyrics() {
+	if p.track == nil {
+		return
+	}
+	var src music.Source
+	if p.Source != nil {
+		src = p.Source(p.track.Source)
+	}
+	p.lyrics = nil
+	p.lyricsLoaded = false
+	p.loadLyrics(p.gen, src, *p.track)
+	p.sync()
+}
 
 // Downloaded returns the share of the current track downloaded so far, or
 // false before it has started to.
@@ -856,10 +879,15 @@ func (p *Player) loadCover(gen int, t *music.Track) {
 func (p *Player) loadLyrics(gen int, src music.Source, t music.Track) {
 	go func() {
 		var lines []lyrics.Line
+		if p.CustomLyrics != nil {
+			if l := p.CustomLyrics(t.Source, t.ID); l != nil {
+				lines = lyrics.FromSource(l)
+			}
+		}
 		isYT := strings.Contains(strings.ToLower(t.Source), "youtube") || strings.Contains(strings.ToLower(t.Source), "ytmusic")
 
 		// For YouTube Music, prioritize NetEase Cloud Music's timed & translated lyrics
-		if isYT {
+		if len(lines) == 0 && isYT {
 			match := netease.Match(t.ArtistNames(), t.Name)
 			if match != nil && match.LyricsLRC != "" {
 				lines = lyrics.FromSource(&music.Lyrics{

@@ -38,6 +38,12 @@ func (a *app) songItems(tr *music.Track, pid string) func(m *ui.Menu) {
 				copyText(tr.URL)
 			}
 		}
+		if tr.ShowID == "" {
+			m.Separator()
+			if m.Item(T("Choose Lyrics…")).Chosen() {
+				a.openLyricsPicker(tr)
+			}
+		}
 		if a.canDownload(tr) {
 			m.Separator()
 			if m.Item(T("Download…")).Chosen() {

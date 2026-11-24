@@ -354,3 +354,56 @@ func TestYouTubeTrackMatchesNetEaseLyrics(t *testing.T) {
 		}
 	}
 }
+
+// User-selected custom lyrics override source/NetEase lyrics and ReloadLyrics clears them.
+func TestCustomLyricsOverrideAndReload(t *testing.T) {
+	ch := make(chan func(), 16)
+	p := New(func(fn func()) { ch <- fn })
+	tr := music.Track{
+		ID:     "yt-custom-1",
+		Source: "youtube-music",
+		Name:   "Radioactive",
+		Artists: []music.Artist{
+			{Name: "Imagine Dragons"},
+		},
+	}
+	p.Cue([]music.Track{tr})
+
+	overrideOn := true
+	p.CustomLyrics = func(source, id string) *music.Lyrics {
+		if overrideOn && source == "youtube-music" && id == "yt-custom-1" {
+			return &music.Lyrics{LRC: "[00:01.00]Custom Line One"}
+		}
+		return nil
+	}
+
+	p.loadLyrics(0, nil, tr)
+	for {
+		fn := <-ch
+		fn()
+		lines, loaded := p.Lyrics()
+		if loaded {
+			if len(lines) != 1 || lines[0].Text != "Custom Line One" {
+				t.Fatalf("got %+v, want Custom Line One", lines)
+			}
+			break
+		}
+	}
+
+	// Clearing override and calling ReloadLyrics falls back cleanly to auto-matching.
+	overrideOn = false
+	p.ReloadLyrics()
+	deadline := time.After(5 * time.Second)
+	for {
+		select {
+		case fn := <-ch:
+			fn()
+			lines, loaded := p.Lyrics()
+			if loaded && len(lines) > 1 {
+				return
+			}
+		case <-deadline:
+			t.Fatal("timed out waiting for ReloadLyrics after clearing override")
+		}
+	}
+}

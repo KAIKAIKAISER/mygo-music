@@ -93,9 +93,11 @@ type app struct {
 	// to open over: the settings window's, if asked there. Set on the main
 	// thread, read on the plugin's.
 	signInOver  *atomic.Pointer[mygo.Window]
-	naming      nameDialog         // the name of a playlist asked for
-	deleting    deleteDialog       // whether to delete a playlist, asked
-	toast       string             // a message to show once
+	naming        nameDialog         // the name of a playlist asked for
+	deleting      deleteDialog       // whether to delete a playlist, asked
+	lyricsPick    lyricsPicker       // manual NetEase lyrics picker modal
+	lyricsChoices *lyricsStore       // persistent user-selected lyrics per track
+	toast         string             // a message to show once
 	dailySpin   spinState          // the record on the feature card
 	dailyBars      barState                     // the bars on its play button
 	settingText    map[string]*string           // the settings of sources, as being typed
@@ -363,9 +365,11 @@ func Run() error {
 		// Before the window: on Windows it lays out its content as it is
 		// made, and the view asks the player what plays.
 		a.art = newArtCache(a.post)
-	a.downloadMgr = newDownloadManager(a)
-	a.downloadSource = &downloadSource{mgr: a.downloadMgr}
+		a.lyricsChoices = loadLyricsStore()
+		a.downloadMgr = newDownloadManager(a)
+		a.downloadSource = &downloadSource{mgr: a.downloadMgr}
 		a.pl = player.New(a.post)
+		a.pl.CustomLyrics = a.lyricsChoices.get
 		a.pl.Quiet = func(fn func()) { mygo.RunOnMain(fn) }
 		a.pl.Source = a.sourceByID
 		a.pl.Failed = a.sourceFailed

@@ -530,7 +530,7 @@ func (d *desktopLyrics) view(c *ui.Context) {
 	strokeBuf := float32(10)
 	minWinW := float32(128)
 	if !locked && d.toolbarHover {
-		minWinW = 396
+		minWinW = 424
 	}
 	maxWinW := computeLyricsMaxWidth(area, anchor, d.anchorRightGap, d.anchorLeftGap, minWinW)
 
@@ -870,6 +870,13 @@ func (d *desktopLyrics) toolbar(c *ui.Context, activeColor ui.Color, justify ui.
 			}
 			if toolIconBtn(c.Key("align-btn"), alignIcon, 13, ui.RGBA(255, 255, 255, 0.85), alignLabel).Clicked() {
 				a.cycleDesktopLyricsAnchor()
+			}
+
+			// Choose Lyrics picker
+			if tr := pl.Current(); tr != nil && tr.ShowID == "" {
+				if toolIconBtn(c.Key("choose-lyrics"), iconLyrics, 13, ui.RGBA(255, 255, 255, 0.85), T("Choose Lyrics…")).Clicked() {
+					a.openLyricsPicker(tr)
+				}
 			}
 
 			// Divider
